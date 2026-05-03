@@ -92,9 +92,7 @@ function createDialog(url, properties) {
   iframe.className = "modal-dialog__iframe"
   iframe.src = url
 
-  // Hide iframe until native CSS is applied to prevent nav bar flash.
-  // The dialog animation plays while the iframe loads in the background
-  // (same strategy as iOS: sheet animation masks WebView load time).
+  // Inject host-specific styles into iframe on each load.
   iframe.addEventListener("load", () => {
     const doc = iframe.contentDocument
     if (!doc) return
@@ -113,87 +111,64 @@ function createDialog(url, properties) {
       doc.head.appendChild(link)
     }
 
-    // Inject iframe-side behavior:
-    // 1. Intercept non-modal navigations to dismiss modal and navigate parent
-    // 2. Update parent title bar on Turbo navigation within iframe
-    const script = doc.createElement("script")
-    script.textContent = `
-      document.addEventListener("turbo:before-visit", (event) => {
-        if (window.parent === window) return
-        const isModal = window.parent.__turboModalDialogIsModal?.(event.detail.url)
-        if (isModal === false) {
-          event.preventDefault()
-          window.parent.__turboModalDialogDismissAndVisit?.(event.detail.url)
-        }
-      })
-      document.addEventListener("turbo:load", () => {
-        if (window.parent === window) return
-        window.parent.__turboModalDialogUpdateTitle?.(document.title)
-      })
-    `
-    doc.head.appendChild(script)
-
-    // Update header title from iframe's <title> (same as native nav bar)
-    title.textContent = doc.title || ""
-
     // Reveal iframe now that nav is hidden
     iframe.classList.add("modal-dialog__iframe--loaded")
   })
+
+  // Let the polyfill wire up cross-frame events (turbo:iframe-content-loaded,
+  // dismiss-and-visit, etc.) on this iframe.
+  iframeNavigation.bindFrame(iframe)
 
   dialog.appendChild(header)
   dialog.appendChild(iframe)
 
   // --- Close behavior ---
-
-  let afterCloseCallback = null
+  //
+  // User-initiated close (✕/ESC/backdrop) calls TurboIframe.dismiss(),
+  // which dispatches turbo:iframe-dismissed. Our listener for that event
+  // (registered in activate()) runs the close animation and the host's
+  // own visit if the polyfill provides a targetUrl.
 
   function closeWithAnimation(callback) {
-    if (dialog.classList.contains("modal-dialog--closing")) return
-
-    if (callback) afterCloseCallback = callback
-
-    if (!animated) {
-      dialog.close()
+    if (dialog.classList.contains("modal-dialog--closing")) {
+      callback?.()
       return
     }
-
+    if (!animated) {
+      dialog.close()
+      callback?.()
+      return
+    }
     dialog.classList.add("modal-dialog--closing")
-    dialog.addEventListener("animationend", () => dialog.close(), { once: true })
+    dialog.addEventListener("animationend", () => {
+      dialog.close()
+      callback?.()
+    }, { once: true })
   }
-
-  // Expose for parent to call from dismiss-and-navigate
   dialog.closeWithAnimation = closeWithAnimation
 
-  closeButton.addEventListener("click", () => closeWithAnimation())
+  closeButton.addEventListener("click", () => {
+    window.TurboIframe.dismiss(activeElement?.fallbackUrl)
+  })
 
   dialog.addEventListener("cancel", (event) => {
     event.preventDefault()
-    if (dismissGestureEnabled) closeWithAnimation()
+    if (dismissGestureEnabled) {
+      window.TurboIframe.dismiss(activeElement?.fallbackUrl)
+    }
   })
 
   dialog.addEventListener("close", () => {
-    const callback = afterCloseCallback
-    afterCloseCallback = null
-
     dialog.remove()
     document.body.classList.remove("turbo-modal-dialog-direct-access")
-    activeDialog = null
+    if (activeDialog === dialog) activeDialog = null
     dialogIsDirectAccess = false
-
-    if (callback) {
-      // dismiss-and-visit handled the navigation itself
-      iframeNavigation.clear()
-      callback()
-    } else {
-      // ✕/ESC/backdrop or popstate-triggered close
-      iframeNavigation.navigateOut(activeElement?.fallbackUrl)
-    }
   })
 
   if (dismissGestureEnabled) {
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog) {
-        closeWithAnimation()
+        window.TurboIframe.dismiss(activeElement?.fallbackUrl)
       }
     })
   }
@@ -246,6 +221,38 @@ function activate(element) {
   loadLocalPathConfiguration(element)
   loadRemotePathConfiguration(element)
 
+  // Wire up the iframe-presentation polyfill.
+  iframeNavigation.start({
+    matchUrl: (url) => matchModalRule(new URL(url).pathname)
+  })
+
+  // Listen to events from the polyfill.
+  document.addEventListener("turbo:iframe-presented", (event) => {
+    openModal(event.detail.url, event.detail.properties)
+  })
+
+  document.addEventListener("turbo:iframe-content-loaded", (event) => {
+    const titleEl = activeDialog?.querySelector(".modal-dialog__title")
+    if (titleEl) titleEl.textContent = event.detail.title || ""
+  })
+
+  document.addEventListener("turbo:iframe-dismissed", (event) => {
+    const targetUrl = event.detail.targetUrl
+    if (!activeDialog) {
+      if (targetUrl) window.Turbo.visit(targetUrl, { action: "replace" })
+      return
+    }
+    // targetUrl === null indicates popstate-triggered dismissal — the browser
+    // has already navigated, so skip the animation and close instantly.
+    if (targetUrl === null) {
+      activeDialog.close()
+    } else {
+      activeDialog.closeWithAnimation(() => {
+        window.Turbo.visit(targetUrl, { action: "replace" })
+      })
+    }
+  })
+
   // Direct-access detection: if the current URL matches a modal pattern
   // and no modal is open, open the page as a modal with hidden background.
   function checkDirectAccess() {
@@ -258,37 +265,6 @@ function activate(element) {
   } else {
     checkDirectAccess()
   }
-
-  // Expose functions for iframe to call (same-origin).
-  // Non-modal links inside the modal iframe call these to dismiss
-  // the modal and navigate on the parent page.
-  window.__turboModalDialogIsModal = (url) => {
-    return matchModalRule(new URL(url).pathname) !== null
-  }
-
-  window.__turboModalDialogUpdateTitle = (newTitle) => {
-    const titleEl = activeDialog?.querySelector(".modal-dialog__title")
-    if (titleEl) titleEl.textContent = newTitle || ""
-  }
-
-  window.__turboModalDialogDismissAndVisit = (url) => {
-    if (activeDialog?.closeWithAnimation) {
-      // Animate close, then navigate parent after animation completes
-      activeDialog.closeWithAnimation(() => {
-        window.Turbo.visit(url, { action: "replace" })
-      })
-    } else if (activeDialog) {
-      activeDialog.close()
-      window.Turbo.visit(url, { action: "replace" })
-    }
-  }
-
-  iframeNavigation.start({
-    matchUrl: (url) => matchModalRule(new URL(url).pathname),
-    isShown: () => activeDialog !== null && !dialogIsDirectAccess,
-    onShow: (url, properties) => openModal(url, properties),
-    onDismiss: () => activeDialog?.close()
-  })
 }
 
 // --- Custom Element ---

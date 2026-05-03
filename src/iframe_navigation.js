@@ -1,83 +1,203 @@
-// Iframe Navigation — joint session history × Turbo Drive
+// Iframe Navigation — polyfill for a hypothetical future Turbo Drive
+// API for presenting URLs in iframes (e.g., as modal overlays).
 //
-// When a page presents content in an <iframe> (e.g., as a modal overlay)
-// instead of replacing the body, the iframe's own navigation creates
-// entries in the parent browsing context's joint session history.
-// This module coordinates that with Turbo Drive on the parent:
+// Synthesizes turbo:iframe-* events and exposes a TurboIframe global
+// programmatic API by intercepting Turbo Drive's existing events and
+// managing joint session history. When/if Turbo Drive natively
+// supports iframe presentation, this module can be removed and the
+// rest of the package will continue to work unchanged.
 //
-// - Intercepts turbo:before-visit for iframe-presented URLs and asks
-//   the host to show the iframe.
-// - Blocks turbo:before-render for those URLs so Turbo doesn't replace
-//   the parent body during popstate restoration.
-// - Listens to popstate to show/dismiss the iframe based on URL.
-// - Tracks the pre-iframe URL and provides navigateOut(), which uses
-//   Turbo.visit(replace) to return there reliably across browsers.
-//   (parent.history.back() is unreliable when iframe navigation has
-//   added joint-history entries — Chrome and Firefox differ.)
+// === Events (dispatched on document) ===
+//
+//   turbo:before-iframe-present  (cancelable)
+//     detail: { url, properties }
+//     Fires before an iframe is presented. preventDefault to skip.
+//
+//   turbo:iframe-presented
+//     detail: { url, properties, bindFrame }
+//     Host should create the iframe and pass it to detail.bindFrame
+//     so the polyfill can wire up cross-frame communication.
+//
+//   turbo:iframe-content-loaded
+//     detail: { url, title }
+//     Iframe content (re)loaded. Useful for syncing modal title.
+//
+//   turbo:before-iframe-dismiss  (cancelable)
+//     Fires before iframe is dismissed. preventDefault to keep open.
+//
+//   turbo:iframe-dismissed
+//     detail: { targetUrl }
+//     Host should remove the iframe (with animation if any).
+//     If targetUrl is non-null, host navigates parent there after dismissal.
+//
+// === Programmatic API (window.TurboIframe) ===
+// Naming aspires to a future Turbo Drive extension (Turbo.iframe.*) but
+// uses a separate global because Turbo's global is not extensible.
+//
+//   matchesUrl(url) — returns properties object or null
+//   isPresented — read-only boolean
+//   dismiss(fallbackUrl?) — dismiss; navigation handled by host on iframe-dismissed
+//   dismissAndVisit(url) — dismiss with explicit target URL
 
 let preIframeUrl = null
 let closingByPopstate = false
-let config = null
+let isPresented = false
+let matchUrlFn = null
 
-export function start(opts) {
-  if (config) return
-  config = opts
+export function start({ matchUrl }) {
+  if (matchUrlFn) return
+  matchUrlFn = matchUrl
+
   document.addEventListener("turbo:before-visit", handleBeforeVisit)
   document.addEventListener("turbo:before-render", handleBeforeRender)
   window.addEventListener("popstate", handlePopstate)
+
+  // Public programmatic API.
+  window.TurboIframe = {
+    matchesUrl: (url) => matchUrlFn(url),
+    get isPresented() { return isPresented },
+    dismiss,
+    dismissAndVisit
+  }
+
+  // Direct-access detection — if we land on an iframe URL on initial page
+  // load, mark as presented so dismiss() works correctly. Host detects
+  // direct access via DOMContentLoaded and creates the dialog itself.
+  if (matchUrlFn(location.href)) {
+    isPresented = true
+  }
 }
 
-// Called by the host after the iframe has been removed. Navigates the
-// parent back to the URL we came from, or to fallbackUrl when there's
-// none (direct-access / restoration). If popstate already navigated,
-// this is a no-op.
-export function navigateOut(fallbackUrl) {
+// --- Programmatic API ---
+
+function dismiss(fallbackUrl) {
+  if (!isPresented) return
+  if (!dispatchCancelable("turbo:before-iframe-dismiss")) return
+
+  let targetUrl = null
   if (closingByPopstate) {
     closingByPopstate = false
-    preIframeUrl = null
-    return
+  } else {
+    targetUrl = preIframeUrl || fallbackUrl || "/"
   }
-  const target = preIframeUrl || fallbackUrl || "/"
   preIframeUrl = null
-  window.Turbo.visit(target, { action: "replace" })
+  isPresented = false
+  dispatch("turbo:iframe-dismissed", { targetUrl })
 }
 
-// Reset internal state without navigating. Use when the host performs
-// its own navigation (e.g., dismiss-and-visit when an iframe-internal
-// link points to a non-iframe URL).
-export function clear() {
+function dismissAndVisit(url) {
+  if (!isPresented) {
+    window.Turbo.visit(url, { action: "replace" })
+    return
+  }
+  if (!dispatchCancelable("turbo:before-iframe-dismiss")) return
+
   preIframeUrl = null
   closingByPopstate = false
+  isPresented = false
+  dispatch("turbo:iframe-dismissed", { targetUrl: url })
 }
+
+// --- Turbo Drive event handlers ---
 
 function handleBeforeVisit(event) {
   const url = new URL(event.detail.url).href
-  const match = config.matchUrl(url)
-  if (!match) return
+  const properties = matchUrlFn(url)
+  if (!properties) return
 
   event.preventDefault()
+  if (!dispatchCancelable("turbo:before-iframe-present", { url, properties })) return
+
   if (preIframeUrl === null && location.href !== url) {
     preIframeUrl = location.href
   }
   if (location.href !== url) {
     history.pushState(null, "", url)
   }
-  config.onShow(url, match)
+  isPresented = true
+  presentIframe(url, properties)
 }
 
 function handleBeforeRender(event) {
   // Block Turbo's body replacement for iframe-presented URLs. Catches
   // the restoration visit Turbo dispatches on popstate (back/forward)
   // where turbo:before-visit doesn't fire reliably.
-  if (config.matchUrl(location.href)) event.preventDefault()
+  if (matchUrlFn(location.href)) event.preventDefault()
 }
 
 function handlePopstate() {
-  const match = config.matchUrl(location.href)
-  if (config.isShown() && !match) {
+  const properties = matchUrlFn(location.href)
+
+  if (isPresented && !properties) {
+    // Browser back away from iframe URL — dismiss without navigation
+    // (browser already navigated).
     closingByPopstate = true
-    config.onDismiss()
-  } else if (!config.isShown() && match) {
-    config.onShow(location.href, match)
+    if (!dispatchCancelable("turbo:before-iframe-dismiss")) {
+      closingByPopstate = false
+      return
+    }
+    closingByPopstate = false
+    preIframeUrl = null
+    isPresented = false
+    dispatch("turbo:iframe-dismissed", { targetUrl: null })
+  } else if (!isPresented && properties) {
+    // Browser forward to iframe URL — restore presentation (no pushState).
+    if (!dispatchCancelable("turbo:before-iframe-present", { url: location.href, properties })) return
+    isPresented = true
+    presentIframe(location.href, properties)
   }
+}
+
+// --- Iframe binding (cross-frame communication) ---
+
+function presentIframe(url, properties) {
+  dispatch("turbo:iframe-presented", { url, properties, bindFrame })
+}
+
+// Host calls this after creating the iframe, to wire up cross-frame events.
+export function bindFrame(iframe) {
+  iframe.addEventListener("load", () => {
+    const doc = iframe.contentDocument
+    if (!doc) return
+
+    // Inject a script that bridges iframe-internal Turbo events to
+    // the parent's turbo:iframe-* event system.
+    const script = doc.createElement("script")
+    script.textContent = `
+      document.addEventListener("turbo:before-visit", (event) => {
+        if (window.parent === window) return
+        const url = event.detail.url
+        if (!window.parent.TurboIframe.matchesUrl(url)) {
+          event.preventDefault()
+          window.parent.TurboIframe.dismissAndVisit(url)
+        }
+      })
+      document.addEventListener("turbo:load", () => {
+        if (window.parent === window) return
+        window.parent.document.dispatchEvent(new CustomEvent("turbo:iframe-content-loaded", {
+          bubbles: true,
+          detail: { url: location.href, title: document.title }
+        }))
+      })
+    `
+    doc.head.appendChild(script)
+
+    // Initial content-loaded event (for first load before turbo:load fires)
+    document.dispatchEvent(new CustomEvent("turbo:iframe-content-loaded", {
+      bubbles: true,
+      detail: { url: doc.location.href, title: doc.title }
+    }))
+  })
+}
+
+// --- Helpers ---
+
+function dispatch(type, detail = {}) {
+  document.dispatchEvent(new CustomEvent(type, { bubbles: true, detail }))
+}
+
+function dispatchCancelable(type, detail = {}) {
+  const event = new CustomEvent(type, { bubbles: true, cancelable: true, detail })
+  document.dispatchEvent(event)
+  return !event.defaultPrevented
 }
