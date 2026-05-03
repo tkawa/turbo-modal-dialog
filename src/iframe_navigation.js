@@ -226,6 +226,15 @@ export function bindFrame(iframe) {
       })
       document.addEventListener("turbo:load", () => {
         if (window.parent === window) return
+        // Sync the parent's URL with the iframe's current modal URL so
+        // the address bar reflects intra-modal navigation. Use replaceState
+        // because the iframe's session history already grew by one entry
+        // for this navigation; pushing on the parent too would double-count
+        // and break joint-session-history back/forward.
+        if (window.parent.TurboIframe.matchesUrl(location.href) &&
+            window.parent.location.href !== location.href) {
+          window.parent.history.replaceState(null, "", location.href)
+        }
         window.parent.document.dispatchEvent(new CustomEvent("turbo:iframe-content-loaded", {
           bubbles: true,
           detail: { url: location.href, title: document.title }

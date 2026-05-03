@@ -24,6 +24,19 @@ test.describe("modal navigation", () => {
     await expect(page.locator(".modal-dialog__title")).toHaveText("Modal Navigation #2")
   })
 
+  test("parent URL tracks intra-modal navigation", async ({ page }) => {
+    await page.goto("/")
+    await page.click("#open-modal")
+    await expect(page).toHaveURL("/modals/first")
+
+    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    await iframe.locator("#modal-to-modal").click()
+    await expect(iframe.locator("body")).toContainText("Modal Navigation #2")
+
+    // Address bar should follow the iframe's modal URL.
+    await expect(page).toHaveURL("/modals/second")
+  })
+
   test("closing after intra-modal navigation returns to original page", async ({ page }) => {
     await page.goto("/")
     await page.click("#open-modal")
