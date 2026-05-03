@@ -256,7 +256,20 @@ function activate(element) {
     // close button, dismiss-and-visit, form-submit redirect). When
     // targetUrl is set, Turbo.visit() runs concurrently with the
     // transition — the body replace is captured into the same VT.
-    withViewTransition(() => activeDialog.close())
+    //
+    // Both close() and remove() run inside the VT callback so the new
+    // snapshot is taken with the dialog fully gone. If we relied on the
+    // close-event handler to remove() (it does that for non-VT paths
+    // like when activeDialog is mutated externally), Chrome would still
+    // capture the dialog (display:none from UA stylesheet on
+    // dialog:not([open])) into the new snapshot and run a phantom
+    // slide-in alongside the slide-out, washing the animation into a
+    // cross-fade.
+    const dialogToClose = activeDialog
+    withViewTransition(() => {
+      dialogToClose.close()
+      dialogToClose.remove()
+    })
     if (targetUrl) window.Turbo.visit(targetUrl, { action: "replace" })
   })
 
