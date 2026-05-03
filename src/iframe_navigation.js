@@ -3,7 +3,7 @@
 //
 // Synthesizes turbo:iframe-* events and exposes a TurboIframe global
 // programmatic API by intercepting Turbo Drive's existing events and
-// managing joint session history. When/if Turbo Drive natively
+// coordinating with iframe navigation. When/if Turbo Drive natively
 // supports iframe presentation, this module can be removed and the
 // rest of the package will continue to work unchanged.
 //
@@ -38,6 +38,26 @@
 //   isPresented — read-only boolean
 //   dismiss(fallbackUrl?) — dismiss; navigation handled by host on iframe-dismissed
 //   dismissAndVisit(url) — dismiss with explicit target URL
+//
+// === Navigation strategy: why we use Turbo.visit(replace) ===
+//
+// When dismissing the iframe, we navigate via Turbo.visit(target, { action:
+// "replace" }) rather than parent.history.back(). The reason is that
+// parent.history.back() with iframe history entries behaves differently
+// across browsers:
+//
+//   - Chrome / WebKit: traverses joint session history (parent + iframe)
+//   - Firefox:         traverses parent's session history only
+//
+// The HTML Living Standard's session-history rewrite leans toward the
+// Chrome/WebKit interpretation, but Firefox hasn't aligned yet. Rather
+// than UA-sniff Firefox or count iframe-history depth (both add fragile
+// state), we follow Turbo's broader pattern: avoid APIs whose behavior
+// is browser-divergent and take deterministic control ourselves. Turbo
+// itself does this for scroll restoration — sets `scrollRestoration =
+// "manual"` and manages scroll positions internally rather than relying
+// on the browser's auto-restoration. Turbo has zero User-Agent sniffing
+// in its codebase; we follow the same discipline here.
 
 let preIframeUrl = null
 let closingByPopstate = false
