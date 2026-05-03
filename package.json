@@ -1,0 +1,36 @@
+{
+  "name": "turbo-modal-dialog",
+  "version": "0.1.0",
+  "description": "Present Turbo Drive navigations as modals — bringing a Hotwire Native–compatible approach to the web.",
+  "type": "module",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./style.css": "./src/style.css"
+  },
+  "files": [
+    "src/"
+  ],
+  "keywords": [
+    "turbo",
+    "hotwire",
+    "hotwire-native",
+    "modal",
+    "dialog",
+    "path-configuration"
+  ],
+  "author": "Toru KAWAMURA",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tkawa/turbo-modal-dialog.git"
+  },
+  "homepage": "https://github.com/tkawa/turbo-modal-dialog#readme",
+  "bugs": {
+    "url": "https://github.com/tkawa/turbo-modal-dialog/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
