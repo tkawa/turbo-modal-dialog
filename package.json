@@ -3,14 +3,17 @@
   "version": "0.1.0",
   "description": "Present Turbo Drive navigations as modals — bringing a Hotwire Native–compatible approach to the web.",
   "type": "module",
-  "main": "src/index.js",
-  "module": "src/index.js",
+  "main": "dist/turbo-modal-dialog.es2017-umd.js",
+  "module": "dist/turbo-modal-dialog.es2017-esm.js",
   "exports": {
-    ".": "./src/index.js",
-    "./style.css": "./src/style.css"
+    ".": {
+      "import": "./dist/turbo-modal-dialog.es2017-esm.js",
+      "require": "./dist/turbo-modal-dialog.es2017-umd.js"
+    },
+    "./style.css": "./dist/style.css"
   },
   "files": [
-    "src/"
+    "dist/"
   ],
   "keywords": [
     "turbo",
@@ -34,12 +37,18 @@
     "node": ">=18"
   },
   "scripts": {
+    "build": "rollup -c && cp src/style.css dist/style.css",
+    "watch": "rollup -wc",
     "start": "node src/tests/server.mjs",
-    "test": "playwright test"
+    "pretest": "npm run build",
+    "test": "playwright test",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@hotwired/turbo": "^8.0.0",
     "@playwright/test": "^1.51.1",
-    "express": "^5.0.0"
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "express": "^5.0.0",
+    "rollup": "^4.60.2"
   }
 }

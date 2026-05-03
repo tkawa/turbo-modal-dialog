@@ -13,7 +13,13 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npx playwright install --with-deps
+      - name: Build
+        run: npm run build
       - name: Chrome Test
         run: npm test -- --project=chromium
       - name: Firefox Test
         run: npm test -- --project=firefox
+      - uses: actions/upload-artifact@v4
+        with:
+          name: turbo-modal-dialog-dist
+          path: dist/*

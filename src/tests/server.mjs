@@ -8,8 +8,8 @@ const root = join(__dirname, "..", "..")
 const app = express()
 app.use(express.urlencoded({ extended: true }))
 
-// Library files (importable by fixtures via /src/index.js, /src/style.css)
-app.use("/src", express.static(join(root, "src")))
+// Built library files (fixtures load /dist/turbo-modal-dialog.es2017-esm.js, /dist/style.css)
+app.use("/dist", express.static(join(root, "dist")))
 
 // Turbo from node_modules (so fixtures can <script src="/turbo.js">)
 app.get("/turbo.js", (_req, res) => {
