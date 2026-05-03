@@ -43,10 +43,12 @@ let activeElement = null  // the <turbo-modal-dialog> instance that activated us
 let closingByPopstate = false
 let dialogIsDirectAccess = false
 let initialized = false
-// Number of joint-session-history entries the modal owns: 1 for the
-// parent's pushState plus 1 for each iframe navigation. On close we
-// history.go(-modalDepth) to skip past all of them at once.
-let modalDepth = 0
+// URL of the page that was active before the modal opened. On close,
+// we navigate back to it via Turbo.visit (replace) instead of
+// history.back(), because the parent's history.back() can step into
+// joint-session-history entries created by iframe navigation, and
+// browsers (Chrome vs Firefox) handle that differently.
+let preModalUrl = null
 
 // --- Path Configuration ---
 
@@ -126,8 +128,7 @@ function createDialog(url, properties) {
 
     // Inject iframe-side behavior:
     // 1. Intercept non-modal navigations to dismiss modal and navigate parent
-    // 2. Notify parent of intra-modal navigations so it can track history depth
-    // 3. Update parent title bar on Turbo navigation within iframe
+    // 2. Update parent title bar on Turbo navigation within iframe
     const script = doc.createElement("script")
     script.textContent = `
       document.addEventListener("turbo:before-visit", (event) => {
@@ -136,8 +137,6 @@ function createDialog(url, properties) {
         if (isModal === false) {
           event.preventDefault()
           window.parent.__turboModalDialogDismissAndVisit?.(event.detail.url)
-        } else if (isModal === true) {
-          window.parent.__turboModalDialogIframeNavigated?.()
         }
       })
       document.addEventListener("turbo:load", () => {
@@ -201,17 +200,20 @@ function createDialog(url, properties) {
       // Browser back already navigated; nothing to do
       // (Forward entry remains so the modal can be restored)
       closingByPopstate = false
-      modalDepth = 0
+      preModalUrl = null
     } else if (wasDirectAccess) {
       // Direct-access modal: no history entry to go back to, use fallback
       window.Turbo.visit(activeElement?.fallbackUrl || "/")
-      modalDepth = 0
+      preModalUrl = null
     } else {
-      // ✕/ESC/backdrop on a pushed modal: go back enough to skip
-      // the modal entry and any history entries iframe navs added.
-      const depth = modalDepth
-      modalDepth = 0
-      if (depth > 0) history.go(-depth)
+      // ✕/ESC/backdrop: navigate back to the page we came from.
+      // Using Turbo.visit(replace) is more reliable than history.back/go
+      // across browsers when iframe navs have grown the joint session
+      // history. If we don't know the pre-modal URL (e.g., the modal
+      // was restored by browser forward), fall back.
+      const target = preModalUrl || activeElement?.fallbackUrl || "/"
+      preModalUrl = null
+      window.Turbo.visit(target, { action: "replace" })
     }
   })
 
@@ -232,6 +234,14 @@ function openModal(url, properties) {
     activeDialog = null
   }
 
+  // For link-click opens, location.href is the pre-modal URL (we haven't
+  // pushed yet). For restoration (popstate forward), location.href is
+  // already the modal URL — leave preModalUrl as null so close uses the
+  // fallback URL.
+  if (preModalUrl === null && location.href !== url) {
+    preModalUrl = location.href
+  }
+
   const dialog = createDialog(url, properties)
   document.body.appendChild(dialog)
   dialog.showModal()
@@ -243,7 +253,6 @@ function openModal(url, properties) {
   // the new URL — no need to push again.
   if (location.href !== url) {
     history.pushState(null, "", url)
-    modalDepth++
   }
 }
 
@@ -304,10 +313,6 @@ function activate(element) {
     if (titleEl) titleEl.textContent = newTitle || ""
   }
 
-  window.__turboModalDialogIframeNavigated = () => {
-    modalDepth++
-  }
-
   window.__turboModalDialogDismissAndVisit = (url) => {
     if (activeDialog?.closeWithAnimation) {
       // Animate close, then navigate parent after animation completes
@@ -348,7 +353,6 @@ function activate(element) {
       activeDialog.close()
     } else if (!activeDialog && match) {
       // Forward navigation to a modal URL — restore modal without pushState
-      modalDepth = 1  // current entry is the restored modal
       openModal(location.href, match)
     }
   })
