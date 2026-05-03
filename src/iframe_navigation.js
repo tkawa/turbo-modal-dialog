@@ -39,25 +39,41 @@
 //   dismiss(fallbackUrl?) — dismiss; navigation handled by host on iframe-dismissed
 //   dismissAndVisit(url) — dismiss with explicit target URL
 //
-// === Navigation strategy: why we use Turbo.visit(replace) ===
+// === Navigation strategy on dismiss ===
 //
-// When dismissing the iframe, we navigate via Turbo.visit(target, { action:
-// "replace" }) rather than parent.history.back(). The reason is that
-// parent.history.back() with iframe history entries behaves differently
-// across browsers:
+// When dismissing the iframe, the host calls Turbo.visit(target, { action:
+// "replace" }) rather than parent.history.back(). Two independent reasons:
 //
-//   - Chrome / WebKit: traverses joint session history (parent + iframe)
-//   - Firefox:         traverses parent's session history only
+// 1. parent.history.back() is browser-divergent in the presence of iframe
+//    history entries, so we cannot rely on it:
 //
-// The HTML Living Standard's session-history rewrite leans toward the
-// Chrome/WebKit interpretation, but Firefox hasn't aligned yet. Rather
-// than UA-sniff Firefox or count iframe-history depth (both add fragile
-// state), we follow Turbo's broader pattern: avoid APIs whose behavior
-// is browser-divergent and take deterministic control ourselves. Turbo
-// itself does this for scroll restoration — sets `scrollRestoration =
-// "manual"` and manages scroll positions internally rather than relying
-// on the browser's auto-restoration. Turbo has zero User-Agent sniffing
-// in its codebase; we follow the same discipline here.
+//      - Chrome / WebKit: traverses joint session history (parent + iframe)
+//      - Firefox:         traverses parent's session history only
+//
+//    The HTML Living Standard's session-history rewrite leans toward the
+//    Chrome/WebKit interpretation, but Firefox hasn't aligned yet. Rather
+//    than UA-sniff Firefox or count iframe-history depth (both add fragile
+//    state), we follow Turbo's broader pattern: avoid APIs whose behavior
+//    is browser-divergent and take deterministic control ourselves. Turbo
+//    itself does this for scroll restoration — sets `scrollRestoration =
+//    "manual"` and manages scroll positions internally rather than relying
+//    on the browser's auto-restoration. Turbo has zero User-Agent sniffing
+//    in its codebase; we follow the same discipline here.
+//
+//    This rules out history.back() but on its own would still allow either
+//    Turbo.visit(target, { action: "advance" }) or { action: "replace" }.
+//    The choice between those is the second reason, below.
+//
+// 2. "replace" mirrors the iOS/Android native modal dismiss semantic: the
+//    modal is an ephemeral overlay, not a navigation step. Dismissing
+//    leaves no trace in the navigation stack. With "advance" the modal
+//    URL would remain mid-history and pressing back would resurrect the
+//    modal — surprising right after the user explicitly clicked ✕/ESC.
+//
+//    Note: forward-restore (browser forward re-presents the iframe) IS
+//    supported via popstate; that is the right place for "back/forward
+//    re-traversal" semantics. Explicit dismiss is treated separately and
+//    intentionally collapses the modal entry out of the stack.
 
 let preIframeUrl = null
 let closingByPopstate = false
