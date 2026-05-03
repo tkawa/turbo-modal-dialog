@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Form Submitted</title>
+  <link rel="stylesheet" href="/src/style.css">
+  <script type="module" src="/turbo.js"></script>
+  <script type="module" src="/src/index.js"></script>
+</head>
+<body>
+  <header class="hide@native">
+    <nav>
+      <a href="/">Home</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Form Submitted</h1>
+    <p>This page was redirected to after submitting the form.</p>
+    <dl id="result"></dl>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search)
+    const dl = document.getElementById("result")
+    for (const [key, value] of params) {
+      const dt = document.createElement("dt")
+      dt.textContent = key + ":"
+      const dd = document.createElement("dd")
+      dd.textContent = value
+      dl.append(dt, dd)
+    }
+  </script>
+
+  <turbo-modal-dialog
+    modal-fallback="/"
+    content-stylesheet="/native.css">
+    <script type="application/json">
+      {
+        "rules": [
+          {
+            "patterns": ["/modals/"],
+            "properties": { "context": "modal" }
+          },
+          {
+            "patterns": ["/forms/new$"],
+            "properties": { "context": "modal", "modal_style": "form_sheet" }
+          }
+        ]
+      }
+    </script>
+  </turbo-modal-dialog>
+</body>
+</html>

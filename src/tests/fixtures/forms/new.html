@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Forms and Flash Messages</title>
+  <link rel="stylesheet" href="/src/style.css">
+  <script type="module" src="/turbo.js"></script>
+  <script type="module" src="/src/index.js"></script>
+</head>
+<body>
+  <header class="hide@native">
+    <nav>
+      <a href="/">Home</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="hide@native">Forms and Flash Messages</h1>
+    <p>This page demonstrates passing data to the server and rendering errors.</p>
+
+    <form action="/forms" method="post">
+      <p>
+        <label for="first_name">First name:</label>
+        <input type="text" name="first_name" id="first_name">
+      </p>
+      <p>
+        <label for="last_name">Last name:</label>
+        <input type="text" name="last_name" id="last_name">
+      </p>
+      <p>
+        <button type="submit">Submit form</button>
+      </p>
+    </form>
+  </main>
+
+  <turbo-modal-dialog
+    modal-fallback="/"
+    content-stylesheet="/native.css">
+    <script type="application/json">
+      {
+        "rules": [
+          {
+            "patterns": ["/modals/"],
+            "properties": { "context": "modal" }
+          },
+          {
+            "patterns": ["/forms/new$"],
+            "properties": { "context": "modal", "modal_style": "form_sheet" }
+          }
+        ]
+      }
+    </script>
+  </turbo-modal-dialog>
+</body>
+</html>

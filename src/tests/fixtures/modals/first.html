@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Modal Navigation</title>
+  <link rel="stylesheet" href="/src/style.css">
+  <script type="module" src="/turbo.js"></script>
+  <script type="module" src="/src/index.js"></script>
+</head>
+<body>
+  <header class="hide@native">
+    <nav>
+      <a href="/">Home</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="hide@native">Modal Navigation</h1>
+    <p>This screen was presented as a modal.</p>
+    <ul>
+      <li><a href="/modals/second" id="modal-to-modal">Modal navigation</a></li>
+      <li><a href="/non-modal" id="modal-to-non-modal">Basic navigation</a></li>
+    </ul>
+  </main>
+
+  <turbo-modal-dialog
+    modal-fallback="/"
+    content-stylesheet="/native.css">
+    <script type="application/json">
+      {
+        "rules": [
+          {
+            "patterns": ["/modals/"],
+            "properties": { "context": "modal" }
+          },
+          {
+            "patterns": ["/forms/new$"],
+            "properties": { "context": "modal", "modal_style": "form_sheet" }
+          }
+        ]
+      }
+    </script>
+  </turbo-modal-dialog>
+</body>
+</html>

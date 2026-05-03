@@ -32,5 +32,14 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/tests/server.mjs",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@hotwired/turbo": "^8.0.0",
+    "@playwright/test": "^1.51.1",
+    "express": "^5.0.0"
   }
 }

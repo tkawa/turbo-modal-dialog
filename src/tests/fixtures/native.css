@@ -1,0 +1,6 @@
+/* Loaded inside the modal iframe via the content-stylesheet attribute.
+   Hides elements marked for native (and modal iframe) context. */
+
+.hide\@native {
+  display: none !important;
+}
