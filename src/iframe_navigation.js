@@ -165,6 +165,13 @@ function handlePopstate() {
     if (!dispatchCancelable("turbo:before-iframe-present", { url: location.href, properties })) return
     isPresented = true
     presentIframe(location.href, properties)
+    // Cancel any in-flight Turbo visit (e.g. the previous back's restoration
+    // visit may not have finished rendering yet). Without this, the visit's
+    // before-render will fire under the iframe URL — we'd preventDefault
+    // and the visit would hang, leaving the progress bar stuck.
+    const adapter = window.Turbo?.session?.adapter
+    window.Turbo?.navigator?.currentVisit?.cancel()
+    adapter?.hideVisitProgressBar?.()
   }
 }
 

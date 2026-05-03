@@ -42,6 +42,12 @@ app.post("/forms", (req, res) => {
   res.redirect(`/forms/result?first_name=${encodeURIComponent(first_name)}&last_name=${encodeURIComponent(last_name)}`)
 })
 
+// Slow modal page — same content as /modals/first but with a 1-second
+// delay before the response. Used to test progress-bar / timing behavior.
+app.get("/modals/slow", (_req, res) => {
+  setTimeout(() => res.sendFile(join(__dirname, "fixtures/modals/first.html")), 1000)
+})
+
 // Static fixtures (HTML pages, served with .html resolved automatically)
 app.use(express.static(join(__dirname, "fixtures"), { extensions: ["html"] }))
 
