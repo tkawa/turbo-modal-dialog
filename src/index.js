@@ -29,6 +29,31 @@
 
 import * as iframeNavigation from "./iframe_navigation.js"
 
+// --- View Transitions ---
+//
+// We call document.startViewTransition() directly instead of relying on
+// Turbo 8's <meta name="view-transition"> support. Turbo's ViewTransitioner
+// only wraps `view.renderPage`'s body replacement, but this library
+// preventDefaults turbo:before-visit for iframe URLs, so body replacement
+// never happens for present. Even on dismiss (where Turbo does replace
+// the body), the dialog is JS-injected and absent from the server-rendered
+// HTML, so it has no counterpart in Turbo's new snapshot — the View
+// Transition would have nothing to track on. By calling startViewTransition
+// ourselves at the moment we mutate dialog state, we get the same animation
+// regardless of trigger (click, popstate back, popstate forward, form
+// submit) — present/dismiss/swap unified under one primitive.
+//
+// Browsers without startViewTransition fall back to instant DOM mutation
+// (no animation), keeping the behavior functional but unanimated.
+
+function withViewTransition(callback) {
+  if (document.startViewTransition) {
+    return document.startViewTransition(callback).finished
+  }
+  callback()
+  return Promise.resolve()
+}
+
 // --- Module-level singleton state ---
 
 let rules = []
@@ -126,26 +151,8 @@ function createDialog(url, properties) {
   //
   // User-initiated close (✕/ESC/backdrop) calls TurboIframe.dismiss(),
   // which dispatches turbo:iframe-dismissed. Our listener for that event
-  // (registered in activate()) runs the close animation and the host's
-  // own visit if the polyfill provides a targetUrl.
-
-  function closeWithAnimation(callback) {
-    if (dialog.classList.contains("modal-dialog--closing")) {
-      callback?.()
-      return
-    }
-    if (!animated) {
-      dialog.close()
-      callback?.()
-      return
-    }
-    dialog.classList.add("modal-dialog--closing")
-    dialog.addEventListener("animationend", () => {
-      dialog.close()
-      callback?.()
-    }, { once: true })
-  }
-  dialog.closeWithAnimation = closeWithAnimation
+  // (registered in activate()) wraps dialog.close() in a View Transition
+  // and triggers the host's own visit if the polyfill provides a targetUrl.
 
   closeButton.addEventListener("click", () => {
     window.TurboIframe.dismiss(activeElement?.fallbackUrl)
@@ -183,10 +190,12 @@ function openModal(url, properties) {
   }
 
   const dialog = createDialog(url, properties)
-  document.body.appendChild(dialog)
-  dialog.showModal()
   activeDialog = dialog
   dialogIsDirectAccess = false
+  withViewTransition(() => {
+    document.body.appendChild(dialog)
+    dialog.showModal()
+  })
 }
 
 // Open modal at the current URL when the page was directly loaded
@@ -242,15 +251,13 @@ function activate(element) {
       if (targetUrl) window.Turbo.visit(targetUrl, { action: "replace" })
       return
     }
-    // targetUrl === null indicates popstate-triggered dismissal — the browser
-    // has already navigated, so skip the animation and close instantly.
-    if (targetUrl === null) {
-      activeDialog.close()
-    } else {
-      activeDialog.closeWithAnimation(() => {
-        window.Turbo.visit(targetUrl, { action: "replace" })
-      })
-    }
+    // Unified close path: View Transition wraps dialog.close() so the
+    // animation plays the same way regardless of trigger (popstate back,
+    // close button, dismiss-and-visit, form-submit redirect). When
+    // targetUrl is set, Turbo.visit() runs concurrently with the
+    // transition — the body replace is captured into the same VT.
+    withViewTransition(() => activeDialog.close())
+    if (targetUrl) window.Turbo.visit(targetUrl, { action: "replace" })
   })
 
   // Direct-access detection: if the current URL matches a modal pattern

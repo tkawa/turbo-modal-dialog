@@ -175,23 +175,26 @@ body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog):not(dialog.mod
  * Animation
  *
  * Slide-up entry and slide-down exit, mirroring the native iOS/Android
- * modal presentation. Add the .modal-dialog--no-animation class to disable.
+ * modal presentation. Driven by the View Transitions API: the JS side
+ * wraps dialog mutations in document.startViewTransition(), and these
+ * pseudo-element rules animate the captured snapshots. Same animations
+ * play regardless of trigger (link click, popstate back/forward, form
+ * submit), so present/dismiss feel symmetrical.
+ *
+ * Browsers without View Transitions support fall back to no animation.
+ * Add the .modal-dialog--no-animation class to opt out per dialog.
  */
 
 .modal-dialog:not(.modal-dialog--no-animation) {
-  animation: modal-dialog-slide-in var(--modal-dialog-animation-duration, 0.3s) ease-out;
-
-  &::backdrop {
-    animation: modal-dialog-backdrop-fade-in var(--modal-dialog-animation-duration, 0.3s) ease-out;
-  }
+  view-transition-name: turbo-modal-dialog;
 }
 
-.modal-dialog--closing:not(.modal-dialog--no-animation) {
+::view-transition-old(turbo-modal-dialog) {
   animation: modal-dialog-slide-out var(--modal-dialog-animation-duration, 0.2s) ease-in forwards;
+}
 
-  &::backdrop {
-    animation: modal-dialog-backdrop-fade-out var(--modal-dialog-animation-duration, 0.2s) ease-in forwards;
-  }
+::view-transition-new(turbo-modal-dialog) {
+  animation: modal-dialog-slide-in var(--modal-dialog-animation-duration, 0.3s) ease-out;
 }
 
 @keyframes modal-dialog-slide-in {
@@ -216,21 +219,9 @@ body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog):not(dialog.mod
   }
 }
 
-@keyframes modal-dialog-backdrop-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes modal-dialog-backdrop-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .modal-dialog:not(.modal-dialog--no-animation),
-  .modal-dialog:not(.modal-dialog--no-animation)::backdrop,
-  .modal-dialog--closing:not(.modal-dialog--no-animation),
-  .modal-dialog--closing:not(.modal-dialog--no-animation)::backdrop {
+  ::view-transition-old(turbo-modal-dialog),
+  ::view-transition-new(turbo-modal-dialog) {
     animation-duration: 0s;
   }
 }
