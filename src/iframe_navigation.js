@@ -160,6 +160,11 @@ function handlePopstate() {
     preIframeUrl = null
     isPresented = false
     dispatch("turbo:iframe-dismissed", { targetUrl: null })
+    // The body already contains the parent (pre-iframe) page — we never let
+    // Turbo replace body while the iframe was presented, so Turbo's
+    // restoration visit for this URL is redundant. Cancel it so its body
+    // replace doesn't race with the host's close animation / View Transition.
+    cancelTurboVisit()
   } else if (!isPresented && properties) {
     // Browser forward to iframe URL — restore presentation (no pushState).
     if (!dispatchCancelable("turbo:before-iframe-present", { url: location.href, properties })) return
@@ -169,10 +174,14 @@ function handlePopstate() {
     // visit may not have finished rendering yet). Without this, the visit's
     // before-render will fire under the iframe URL — we'd preventDefault
     // and the visit would hang, leaving the progress bar stuck.
-    const adapter = window.Turbo?.session?.adapter
-    window.Turbo?.navigator?.currentVisit?.cancel()
-    adapter?.hideVisitProgressBar?.()
+    cancelTurboVisit()
   }
+}
+
+function cancelTurboVisit() {
+  const adapter = window.Turbo?.session?.adapter
+  window.Turbo?.navigator?.currentVisit?.cancel()
+  adapter?.hideVisitProgressBar?.()
 }
 
 // --- Iframe binding (cross-frame communication) ---
