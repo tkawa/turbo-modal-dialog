@@ -48,10 +48,10 @@ import * as iframeNavigation from "./iframe_navigation.js"
 
 function withViewTransition(callback) {
   if (document.startViewTransition) {
-    return document.startViewTransition(callback).finished
+    return document.startViewTransition(callback)
   }
   callback()
-  return Promise.resolve()
+  return null
 }
 
 // --- Module-level singleton state ---
@@ -253,9 +253,7 @@ function activate(element) {
     }
     // Unified close path: View Transition wraps dialog.close() so the
     // animation plays the same way regardless of trigger (popstate back,
-    // close button, dismiss-and-visit, form-submit redirect). When
-    // targetUrl is set, Turbo.visit() runs concurrently with the
-    // transition — the body replace is captured into the same VT.
+    // close button, dismiss-and-visit, form-submit redirect).
     //
     // Both close() and remove() run inside the VT callback so the new
     // snapshot is taken with the dialog fully gone. If we relied on the
@@ -265,12 +263,28 @@ function activate(element) {
     // dialog:not([open])) into the new snapshot and run a phantom
     // slide-in alongside the slide-out, washing the animation into a
     // cross-fade.
+    //
+    // Turbo.visit is deferred until the VT is ready (old snapshot taken,
+    // update callback complete) so that Turbo's render — which can use a
+    // cached snapshot and replace <body> on the very next animation frame
+    // — does not race with VT's capture step. Without this, a cached
+    // visit replaces body before VT can capture the dialog into ::view-
+    // transition-old, and no slide-down animation is observed.
     const dialogToClose = activeDialog
-    withViewTransition(() => {
+    const transition = withViewTransition(() => {
       dialogToClose.close()
       dialogToClose.remove()
     })
-    if (targetUrl) window.Turbo.visit(targetUrl, { action: "replace" })
+    if (targetUrl) {
+      if (transition?.ready) {
+        transition.ready.then(
+          () => window.Turbo.visit(targetUrl, { action: "replace" }),
+          () => window.Turbo.visit(targetUrl, { action: "replace" })
+        )
+      } else {
+        window.Turbo.visit(targetUrl, { action: "replace" })
+      }
+    }
   })
 
   // Direct-access detection: if the current URL matches a modal pattern
