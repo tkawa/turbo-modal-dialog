@@ -75,13 +75,35 @@ body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog):not(dialog.mod
 
 .modal-dialog__header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
   padding: 0.5rem 0.5rem 0.5rem 1rem;
   flex-shrink: 0;
 }
 
+.modal-dialog__back-button {
+  cursor: pointer;
+  padding: 0 0.5rem;
+  border: unset;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.modal-dialog__back-button[hidden] {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .modal-dialog__back-button:hover {
+    background: var(--modal-dialog-close-background-hover, #dee2e6);
+  }
+}
+
 .modal-dialog__title {
+  flex: 1;
   font-weight: 600;
   font-size: 1rem;
   line-height: 1.3;

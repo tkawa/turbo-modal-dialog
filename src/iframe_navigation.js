@@ -18,6 +18,13 @@
 //     Host should create the iframe and pass it to detail.bindFrame
 //     so the polyfill can wire up cross-frame communication.
 //
+//   turbo:iframe-navigate
+//     detail: { url, canGoBack }
+//     The iframe should display a different modal URL. Host navigates the
+//     iframe (typically via Turbo.visit(url, { action: "replace" }) so the
+//     iframe's session history doesn't grow), and updates the back-button
+//     visibility from canGoBack.
+//
 //   turbo:iframe-content-loaded
 //     detail: { url, title }
 //     Iframe content (re)loaded. Useful for syncing modal title.
@@ -36,8 +43,37 @@
 //
 //   matchesUrl(url) — returns properties object or null
 //   isPresented — read-only boolean
+//   canGoBack — read-only boolean (modal nav stack length > 1)
 //   dismiss(fallbackUrl?) — dismiss; navigation handled by host on iframe-dismissed
 //   dismissAndVisit(url) — dismiss with explicit target URL
+//   navigateModal(url) — push a new URL onto the modal stack and tell host
+//                        to navigate the iframe. Called from the injected
+//                        iframe script when a user clicks an intra-modal link.
+//   back() — pop the modal stack and tell host to navigate the iframe back.
+//            No-op if stack length <= 1.
+//
+// === History model: parent owns one entry per modal session ===
+//
+// Browser back from anywhere inside a modal dismisses the entire modal.
+// This is achieved by keeping the iframe's session history at length 1 —
+// every intra-modal navigation goes through Turbo.visit(url, { action:
+// "replace" }) inside the iframe, never adding a new joint-session-history
+// entry. A custom "modal stack" (an in-memory array of modal URLs) drives
+// a back button rendered inside the modal header, providing intra-modal
+// back navigation without colliding with browser back.
+//
+// The address bar still tracks the iframe's current URL: the host's
+// navigateModal calls history.replaceState on the parent so the URL bar
+// stays truthful, and refresh / bookmark / share continue to deep-link
+// to the currently displayed modal page.
+//
+// Trade-off vs. having the iframe own its history:
+//   + Browser forward button correctly disables when there's nowhere
+//     forward to go (no stale destroyed-iframe entries left in joint
+//     session history).
+//   + Browser back has a single, predictable meaning: "leave the modal".
+//   - Browser back can no longer step through the modal's internal
+//     navigation. The in-modal back button is the way to do that.
 //
 // === Navigation strategy on dismiss ===
 //
@@ -79,6 +115,10 @@ let preIframeUrl = null
 let closingByPopstate = false
 let isPresented = false
 let matchUrlFn = null
+// Modal navigation stack — drives the in-modal back button. Reset on
+// dismiss / present. Forward-restored presentations start a fresh stack
+// (we have no way to reconstruct a previous in-memory stack from history).
+let modalStack = []
 
 export function start({ matchUrl }) {
   if (matchUrlFn) return
@@ -92,8 +132,11 @@ export function start({ matchUrl }) {
   window.TurboIframe = {
     matchesUrl: (url) => matchUrlFn(url),
     get isPresented() { return isPresented },
+    get canGoBack() { return modalStack.length > 1 },
     dismiss,
-    dismissAndVisit
+    dismissAndVisit,
+    navigateModal,
+    back
   }
 
   // Direct-access detection — if we land on an iframe URL on initial page
@@ -101,6 +144,7 @@ export function start({ matchUrl }) {
   // direct access via DOMContentLoaded and creates the dialog itself.
   if (matchUrlFn(location.href)) {
     isPresented = true
+    modalStack = [location.href]
   }
 }
 
@@ -118,6 +162,7 @@ function dismiss(fallbackUrl) {
   }
   preIframeUrl = null
   isPresented = false
+  modalStack = []
   dispatch("turbo:iframe-dismissed", { targetUrl })
 }
 
@@ -131,7 +176,34 @@ function dismissAndVisit(url) {
   preIframeUrl = null
   closingByPopstate = false
   isPresented = false
+  modalStack = []
   dispatch("turbo:iframe-dismissed", { targetUrl: url })
+}
+
+// Push a URL onto the modal stack and tell the host to navigate the
+// iframe to it. The iframe's session history must NOT grow — host calls
+// Turbo.visit(url, { action: "replace" }) inside the iframe.
+function navigateModal(url) {
+  if (!isPresented) return
+  if (!matchUrlFn(url)) return
+  modalStack.push(url)
+  if (location.href !== url) {
+    history.replaceState(null, "", url)
+  }
+  dispatch("turbo:iframe-navigate", { url, canGoBack: modalStack.length > 1 })
+}
+
+// Pop one entry off the modal stack and ask the host to navigate the
+// iframe back. No-op when there is nothing to go back to.
+function back() {
+  if (!isPresented) return
+  if (modalStack.length <= 1) return
+  modalStack.pop()
+  const previous = modalStack[modalStack.length - 1]
+  if (location.href !== previous) {
+    history.replaceState(null, "", previous)
+  }
+  dispatch("turbo:iframe-navigate", { url: previous, canGoBack: modalStack.length > 1 })
 }
 
 // --- Turbo Drive event handlers ---
@@ -151,6 +223,7 @@ function handleBeforeVisit(event) {
     history.pushState(null, "", url)
   }
   isPresented = true
+  modalStack = [url]
   presentIframe(url, properties)
 }
 
@@ -175,6 +248,7 @@ function handlePopstate() {
     closingByPopstate = false
     preIframeUrl = null
     isPresented = false
+    modalStack = []
     dispatch("turbo:iframe-dismissed", { targetUrl: null })
     // The body already contains the parent (pre-iframe) page — we never let
     // Turbo replace body while the iframe was presented, so Turbo's
@@ -185,6 +259,7 @@ function handlePopstate() {
     // Browser forward to iframe URL — restore presentation (no pushState).
     if (!dispatchCancelable("turbo:before-iframe-present", { url: location.href, properties })) return
     isPresented = true
+    modalStack = [location.href]
     presentIframe(location.href, properties)
     // Cancel any in-flight Turbo visit (e.g. the previous back's restoration
     // visit may not have finished rendering yet). Without this, the visit's
@@ -216,25 +291,42 @@ export function bindFrame(iframe) {
     // the parent's turbo:iframe-* event system.
     const script = doc.createElement("script")
     script.textContent = `
+      // Re-entry guard: when our handler programmatically re-issues a
+      // visit as { action: "replace" } (to keep the iframe's session
+      // history at length 1), we must not intercept that re-issued visit
+      // again — it would loop forever.
+      let __programmaticReplace = false
+
       document.addEventListener("turbo:before-visit", (event) => {
         if (window.parent === window) return
+        if (__programmaticReplace) {
+          __programmaticReplace = false
+          return
+        }
         const url = event.detail.url
-        if (!window.parent.TurboIframe.matchesUrl(url)) {
-          event.preventDefault()
+        event.preventDefault()
+        if (window.parent.TurboIframe.matchesUrl(url)) {
+          // Intra-modal link click — push onto parent's modal stack and
+          // re-trigger the same URL as a replace so iframe history stays
+          // length 1. The parent will dispatch turbo:iframe-navigate; the
+          // host listener will call __navigateInIframe below.
+          window.parent.TurboIframe.navigateModal(url)
+        } else {
           window.parent.TurboIframe.dismissAndVisit(url)
         }
       })
+
+      // Called by the host (parent) to navigate this iframe to a different
+      // modal URL with replace semantics so no joint-session-history
+      // entries are added.
+      window.__navigateInIframe = (url) => {
+        if (location.href === url) return
+        __programmaticReplace = true
+        Turbo.visit(url, { action: "replace" })
+      }
+
       document.addEventListener("turbo:load", () => {
         if (window.parent === window) return
-        // Sync the parent's URL with the iframe's current modal URL so
-        // the address bar reflects intra-modal navigation. Use replaceState
-        // because the iframe's session history already grew by one entry
-        // for this navigation; pushing on the parent too would double-count
-        // and break joint-session-history back/forward.
-        if (window.parent.TurboIframe.matchesUrl(location.href) &&
-            window.parent.location.href !== location.href) {
-          window.parent.history.replaceState(null, "", location.href)
-        }
         window.parent.document.dispatchEvent(new CustomEvent("turbo:iframe-content-loaded", {
           bubbles: true,
           detail: { url: location.href, title: document.title }

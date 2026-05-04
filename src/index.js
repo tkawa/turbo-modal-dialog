@@ -102,6 +102,18 @@ function createDialog(url, properties) {
   const header = document.createElement("div")
   header.className = "modal-dialog__header"
 
+  // In-modal back button — the way to navigate the modal stack now that
+  // browser back is reserved for "leave the modal entirely". Hidden by
+  // default; shown when TurboIframe.canGoBack becomes true (after an
+  // intra-modal link click pushes onto the modal stack).
+  const backButton = document.createElement("button")
+  backButton.className = "modal-dialog__back-button"
+  backButton.type = "button"
+  backButton.setAttribute("aria-label", "Back")
+  backButton.innerHTML = "&#x2039;"
+  backButton.hidden = true
+  header.appendChild(backButton)
+
   const title = document.createElement("span")
   title.className = "modal-dialog__title"
   header.appendChild(title)
@@ -153,6 +165,10 @@ function createDialog(url, properties) {
   // which dispatches turbo:iframe-dismissed. Our listener for that event
   // (registered in activate()) wraps dialog.close() in a View Transition
   // and triggers the host's own visit if the polyfill provides a targetUrl.
+
+  backButton.addEventListener("click", () => {
+    window.TurboIframe.back()
+  })
 
   closeButton.addEventListener("click", () => {
     window.TurboIframe.dismiss(activeElement?.fallbackUrl)
@@ -243,6 +259,17 @@ function activate(element) {
   document.addEventListener("turbo:iframe-content-loaded", (event) => {
     const titleEl = activeDialog?.querySelector(".modal-dialog__title")
     if (titleEl) titleEl.textContent = event.detail.title || ""
+  })
+
+  // Modal-to-modal navigation: tell the iframe (which already
+  // preventDefault'd its own visit) to load the new URL with replace
+  // semantics, and reflect the back-button availability.
+  document.addEventListener("turbo:iframe-navigate", (event) => {
+    if (!activeDialog) return
+    const iframe = activeDialog.querySelector("iframe.modal-dialog__iframe")
+    iframe?.contentWindow?.__navigateInIframe?.(event.detail.url)
+    const back = activeDialog.querySelector(".modal-dialog__back-button")
+    if (back) back.hidden = !event.detail.canGoBack
   })
 
   document.addEventListener("turbo:iframe-dismissed", (event) => {
