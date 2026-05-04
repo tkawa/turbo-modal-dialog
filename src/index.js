@@ -59,7 +59,6 @@ function withViewTransition(callback) {
 let rules = []
 let activeDialog = null
 let activeElement = null  // the <turbo-modal-dialog> instance that activated us
-let dialogIsDirectAccess = false
 let initialized = false
 
 // --- Path Configuration ---
@@ -185,7 +184,6 @@ function createDialog(url, properties) {
     dialog.remove()
     document.body.classList.remove("turbo-modal-dialog-direct-access")
     if (activeDialog === dialog) activeDialog = null
-    dialogIsDirectAccess = false
   })
 
   if (dismissGestureEnabled) {
@@ -207,7 +205,6 @@ function openModal(url, properties) {
 
   const dialog = createDialog(url, properties)
   activeDialog = dialog
-  dialogIsDirectAccess = false
   withViewTransition(() => {
     document.body.appendChild(dialog)
     dialog.showModal()
@@ -224,7 +221,6 @@ function openModalForDirectAccess(properties) {
   document.body.appendChild(dialog)
   dialog.showModal()
   activeDialog = dialog
-  dialogIsDirectAccess = true
 }
 
 // --- Activation ---
@@ -273,44 +269,37 @@ function activate(element) {
   })
 
   document.addEventListener("turbo:iframe-dismissed", (event) => {
-    const targetUrl = event.detail.targetUrl
+    const { targetUrl } = event.detail
+    const visit = targetUrl ? () => window.Turbo.visit(targetUrl, { action: "replace" }) : null
+
     if (!activeDialog) {
-      if (targetUrl) window.Turbo.visit(targetUrl, { action: "replace" })
+      visit?.()
       return
     }
-    // Unified close path: View Transition wraps dialog.close() so the
-    // animation plays the same way regardless of trigger (popstate back,
-    // close button, dismiss-and-visit, form-submit redirect).
+
+    // Unified close path: a View Transition wraps dialog.close() + remove()
+    // so the slide-out animation plays the same way regardless of trigger
+    // (popstate back, close button, dismiss-and-visit, form-submit redirect).
     //
     // Both close() and remove() run inside the VT callback so the new
-    // snapshot is taken with the dialog fully gone. If we relied on the
-    // close-event handler to remove() (it does that for non-VT paths
-    // like when activeDialog is mutated externally), Chrome would still
-    // capture the dialog (display:none from UA stylesheet on
-    // dialog:not([open])) into the new snapshot and run a phantom
+    // snapshot has the dialog fully gone. Otherwise Chrome captures the
+    // closed-but-still-attached dialog (display:none from UA stylesheet
+    // on dialog:not([open])) into the new snapshot and runs a phantom
     // slide-in alongside the slide-out, washing the animation into a
     // cross-fade.
     //
-    // Turbo.visit is deferred until the VT is ready (old snapshot taken,
-    // update callback complete) so that Turbo's render — which can use a
-    // cached snapshot and replace <body> on the very next animation frame
-    // — does not race with VT's capture step. Without this, a cached
-    // visit replaces body before VT can capture the dialog into ::view-
-    // transition-old, and no slide-down animation is observed.
+    // When a targetUrl is set, the visit is deferred until the VT is
+    // ready (old snapshot captured). Otherwise a cached destination
+    // would replace <body> on the very next frame — beating VT to its
+    // capture step and skipping the slide-down.
     const dialogToClose = activeDialog
     const transition = withViewTransition(() => {
       dialogToClose.close()
       dialogToClose.remove()
     })
-    if (targetUrl) {
-      if (transition?.ready) {
-        transition.ready.then(
-          () => window.Turbo.visit(targetUrl, { action: "replace" }),
-          () => window.Turbo.visit(targetUrl, { action: "replace" })
-        )
-      } else {
-        window.Turbo.visit(targetUrl, { action: "replace" })
-      }
+    if (visit) {
+      if (transition?.ready) transition.ready.then(visit, visit)
+      else visit()
     }
   })
 

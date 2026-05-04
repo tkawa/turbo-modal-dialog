@@ -112,7 +112,6 @@
 //    intentionally collapses the modal entry out of the stack.
 
 let preIframeUrl = null
-let closingByPopstate = false
 let isPresented = false
 let matchUrlFn = null
 // Modal navigation stack — drives the in-modal back button. Reset on
@@ -142,10 +141,20 @@ export function start({ matchUrl }) {
   // Direct-access detection — if we land on an iframe URL on initial page
   // load, mark as presented so dismiss() works correctly. Host detects
   // direct access via DOMContentLoaded and creates the dialog itself.
-  if (matchUrlFn(location.href)) {
-    isPresented = true
-    modalStack = [location.href]
-  }
+  if (matchUrlFn(location.href)) enterPresented(location.href)
+}
+
+// State transitions — keep the three module-level flags in lockstep so
+// every entry / exit goes through one obvious place.
+function enterPresented(url) {
+  isPresented = true
+  modalStack = [url]
+}
+
+function exitPresented() {
+  preIframeUrl = null
+  isPresented = false
+  modalStack = []
 }
 
 // --- Programmatic API ---
@@ -154,15 +163,8 @@ function dismiss(fallbackUrl) {
   if (!isPresented) return
   if (!dispatchCancelable("turbo:before-iframe-dismiss")) return
 
-  let targetUrl = null
-  if (closingByPopstate) {
-    closingByPopstate = false
-  } else {
-    targetUrl = preIframeUrl || fallbackUrl || "/"
-  }
-  preIframeUrl = null
-  isPresented = false
-  modalStack = []
+  const targetUrl = preIframeUrl || fallbackUrl || "/"
+  exitPresented()
   dispatch("turbo:iframe-dismissed", { targetUrl })
 }
 
@@ -173,10 +175,7 @@ function dismissAndVisit(url) {
   }
   if (!dispatchCancelable("turbo:before-iframe-dismiss")) return
 
-  preIframeUrl = null
-  closingByPopstate = false
-  isPresented = false
-  modalStack = []
+  exitPresented()
   dispatch("turbo:iframe-dismissed", { targetUrl: url })
 }
 
@@ -222,8 +221,7 @@ function handleBeforeVisit(event) {
   if (location.href !== url) {
     history.pushState(null, "", url)
   }
-  isPresented = true
-  modalStack = [url]
+  enterPresented(url)
   presentIframe(url, properties)
 }
 
@@ -239,32 +237,23 @@ function handlePopstate() {
 
   if (isPresented && !properties) {
     // Browser back away from iframe URL — dismiss without navigation
-    // (browser already navigated).
-    closingByPopstate = true
-    if (!dispatchCancelable("turbo:before-iframe-dismiss")) {
-      closingByPopstate = false
-      return
-    }
-    closingByPopstate = false
-    preIframeUrl = null
-    isPresented = false
-    modalStack = []
+    // (browser already navigated). The body still contains the parent
+    // page (we never let Turbo replace it during presentation), so
+    // Turbo's restoration visit for this URL is redundant. Cancel it
+    // so its body replace doesn't race with the host's close animation.
+    if (!dispatchCancelable("turbo:before-iframe-dismiss")) return
+    exitPresented()
     dispatch("turbo:iframe-dismissed", { targetUrl: null })
-    // The body already contains the parent (pre-iframe) page — we never let
-    // Turbo replace body while the iframe was presented, so Turbo's
-    // restoration visit for this URL is redundant. Cancel it so its body
-    // replace doesn't race with the host's close animation / View Transition.
     cancelTurboVisit()
   } else if (!isPresented && properties) {
     // Browser forward to iframe URL — restore presentation (no pushState).
+    // Also cancel any in-flight Turbo visit (e.g. the previous back's
+    // restoration visit may still be rendering): without this, that
+    // visit's before-render fires under the iframe URL, we preventDefault
+    // it, and the visit hangs — leaving the progress bar stuck.
     if (!dispatchCancelable("turbo:before-iframe-present", { url: location.href, properties })) return
-    isPresented = true
-    modalStack = [location.href]
+    enterPresented(location.href)
     presentIframe(location.href, properties)
-    // Cancel any in-flight Turbo visit (e.g. the previous back's restoration
-    // visit may not have finished rendering yet). Without this, the visit's
-    // before-render will fire under the iframe URL — we'd preventDefault
-    // and the visit would hang, leaving the progress bar stuck.
     cancelTurboVisit()
   }
 }
