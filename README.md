@@ -17,29 +17,50 @@ URL patterns can be marked as modal in a Path Configuration (the same JSON forma
 
 ## Install
 
+This library requires [`@hotwired/turbo`](https://github.com/hotwired/turbo) 8.x to be present at runtime — install it (or have it pinned) in your application alongside the steps below.
+
+### Rails with cssbundling-rails / jsbundling-rails (esbuild, vite, webpack, …)
+
 ```sh
 npm install turbo-modal-dialog
 ```
 
-Or with [importmap-rails](https://github.com/rails/importmap-rails):
-
-```sh
-bin/importmap pin turbo-modal-dialog
-```
-
-## Usage
-
-Import the module:
-
 ```js
+// app/javascript/application.js
 import "turbo-modal-dialog"
 ```
 
-Include the stylesheet:
+```css
+/* app/assets/stylesheets/application.css (or your bundled CSS entry) */
+@import "turbo-modal-dialog/style.css";
+```
+
+### Rails with importmap-rails + propshaft (no JS bundler)
+
+Pin the JS module and vendor the stylesheet:
+
+```sh
+bin/importmap pin turbo-modal-dialog
+curl -L https://cdn.jsdelivr.net/npm/turbo-modal-dialog/dist/style.css \
+  -o vendor/assets/stylesheets/turbo-modal-dialog.css
+```
+
+Then link it from your layout:
+
+```erb
+<%= stylesheet_link_tag "turbo-modal-dialog" %>
+```
+
+### Plain HTML (no build tooling)
 
 ```html
-<link rel="stylesheet" href="/path/to/turbo-modal-dialog/src/style.css">
+<script type="module" src="https://cdn.jsdelivr.net/npm/turbo-modal-dialog/+esm"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/turbo-modal-dialog/dist/style.css">
 ```
+
+> Pin to a specific major/minor in production, e.g. `npm/turbo-modal-dialog@0.2/dist/style.css`.
+
+## Usage
 
 Place the custom element in your layout, with configuration:
 
