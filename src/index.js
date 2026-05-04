@@ -103,15 +103,15 @@ function createDialog(url, properties) {
   header.className = "modal-dialog__header"
 
   // In-modal back button — the way to navigate the modal stack now that
-  // browser back is reserved for "leave the modal entirely". Hidden by
-  // default; shown when TurboIframe.canGoBack becomes true (after an
-  // intra-modal link click pushes onto the modal stack).
+  // browser back is reserved for "leave the modal entirely". Starts
+  // invisible (but still occupies layout space so the title stays
+  // centered); shown when TurboIframe.canGoBack becomes true after an
+  // intra-modal link click pushes onto the modal stack.
   const backButton = document.createElement("button")
-  backButton.className = "modal-dialog__back-button"
+  backButton.className = "modal-dialog__back-button modal-dialog__back-button--invisible"
   backButton.type = "button"
   backButton.setAttribute("aria-label", "Back")
   backButton.innerHTML = "&#x2039;"
-  backButton.hidden = true
   header.appendChild(backButton)
 
   const title = document.createElement("span")
@@ -269,7 +269,7 @@ function activate(element) {
     const iframe = activeDialog.querySelector("iframe.modal-dialog__iframe")
     iframe?.contentWindow?.__navigateInIframe?.(event.detail.url)
     const back = activeDialog.querySelector(".modal-dialog__back-button")
-    if (back) back.hidden = !event.detail.canGoBack
+    if (back) back.classList.toggle("modal-dialog__back-button--invisible", !event.detail.canGoBack)
   })
 
   document.addEventListener("turbo:iframe-dismissed", (event) => {

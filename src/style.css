@@ -77,29 +77,8 @@ body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog):not(dialog.mod
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  padding: 0.5rem;
   flex-shrink: 0;
-}
-
-.modal-dialog__back-button {
-  cursor: pointer;
-  padding: 0 0.5rem;
-  border: unset;
-  border-radius: 0.5rem;
-  background: transparent;
-  color: inherit;
-  font-size: 1.5rem;
-  line-height: 1;
-}
-
-.modal-dialog__back-button[hidden] {
-  display: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .modal-dialog__back-button:hover {
-    background: var(--modal-dialog-close-background-hover, #dee2e6);
-  }
 }
 
 .modal-dialog__title {
@@ -107,6 +86,7 @@ body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog):not(dialog.mod
   font-weight: 600;
   font-size: 1rem;
   line-height: 1.3;
+  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -131,6 +111,7 @@ body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog):not(dialog.mod
   opacity: 1;
 }
 
+.modal-dialog__back-button,
 .modal-dialog__close-button {
   cursor: pointer;
   padding: 0.5rem;
@@ -142,7 +123,16 @@ body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog):not(dialog.mod
   line-height: 1;
 }
 
+/* Reserve layout space when no back step is available so the title
+   stays centered between back and close. visibility instead of
+   display:none keeps the flex column widths symmetric. */
+.modal-dialog__back-button--invisible {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 @media (hover: hover) and (pointer: fine) {
+  .modal-dialog__back-button:hover,
   .modal-dialog__close-button:hover {
     background: var(--modal-dialog-close-background-hover, #dee2e6);
   }
