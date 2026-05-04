@@ -1,17 +1,25 @@
 import { test, expect } from "@playwright/test"
+import { setupEventLog, nextEventNamed } from "../helpers/page.js"
 
 test.describe("browser history", () => {
   test("browser back closes modal, forward restores it", async ({ page }) => {
+    await setupEventLog(page)
     await page.goto("/")
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await nextEventNamed(page, "turbo:iframe-presented", {
+      url: "http://localhost:9000/modals/first"
+    })
     await expect(page).toHaveURL("/modals/first")
 
     await page.goBack()
+    await nextEventNamed(page, "turbo:iframe-dismissed", { targetUrl: null })
     await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
     await expect(page).toHaveURL("/")
 
     await page.goForward()
+    await nextEventNamed(page, "turbo:iframe-presented", {
+      url: "http://localhost:9000/modals/first"
+    })
     await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
     await expect(page).toHaveURL("/modals/first")
   })

@@ -1,16 +1,22 @@
 import { test, expect } from "@playwright/test"
+import { setupEventLog, nextEventNamed } from "../helpers/page.js"
 
 test.describe("modal navigation", () => {
   test("navigation within iframe works", async ({ page }) => {
+    await setupEventLog(page)
     await page.goto("/")
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await nextEventNamed(page, "turbo:iframe-content-loaded", {
+      url: "http://localhost:9000/modals/first",
+      title: "Modal Navigation"
+    })
 
     const iframe = page.frameLocator("dialog.modal-dialog iframe")
-    await expect(iframe.locator("body")).toContainText("This screen was presented as a modal")
-
     await iframe.locator("#modal-to-modal").click()
-    await expect(iframe.locator("body")).toContainText("This screen was pushed on the modal stack")
+    await nextEventNamed(page, "turbo:iframe-content-loaded", {
+      url: "http://localhost:9000/modals/second",
+      title: "Modal Navigation #2"
+    })
   })
 
   test("modal title updates after iframe navigation", async ({ page }) => {
