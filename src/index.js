@@ -111,7 +111,7 @@ function createDialog(url, properties) {
   backButton.className = "modal-dialog__back-button modal-dialog__back-button--invisible"
   backButton.type = "button"
   backButton.setAttribute("aria-label", "Back")
-  backButton.innerHTML = "&#x2039;"
+  backButton.innerHTML = "&#10094;"
   header.appendChild(backButton)
 
   const title = document.createElement("span")

@@ -114,7 +114,12 @@ body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog):not(dialog.mod
 .modal-dialog__back-button,
 .modal-dialog__close-button {
   cursor: pointer;
-  padding: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  padding: 0;
   border: unset;
   border-radius: 0.5rem;
   background: var(--modal-dialog-close-background, #f6f7f8);
