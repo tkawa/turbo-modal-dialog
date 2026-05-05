@@ -1,21 +1,29 @@
 /*
  * Turbo Modal Dialog
  *
- * The custom element is purely a configuration marker; never visible.
+ * The custom element is a configuration marker. Its <dialog> child (when
+ * a modal is presented) needs to render normally, so we use
+ * display:contents — the custom element itself produces no box, but its
+ * children participate in the body's layout as if they were direct
+ * children of <body>. (display:none on the ancestor would suppress the
+ * child dialog even when it's in the top layer.)
+ *
+ * The <script type="application/json"> child is non-rendering, so it is
+ * unaffected.
  */
 
 turbo-modal-dialog {
-  display: none;
+  display: contents;
 }
 
 /*
- * Direct-access mode: hide everything in <body> except this library's
- * own elements (the custom element itself and the dialog overlay) so the
+ * Direct-access mode: hide every other top-level body child so the
  * modal appears over an empty background instead of the modal page's
- * full-page rendering.
+ * full-page rendering. The dialog is a descendant of turbo-modal-dialog
+ * so excluding turbo-modal-dialog is enough.
  */
 
-body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog):not(dialog.modal-dialog) {
+body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog) {
   display: none !important;
 }
 

@@ -206,7 +206,7 @@ function openModal(url, properties) {
   const dialog = createDialog(url, properties)
   activeDialog = dialog
   withViewTransition(() => {
-    document.body.appendChild(dialog)
+    activeElement.appendChild(dialog)
     dialog.showModal()
   })
 }
@@ -218,7 +218,7 @@ function openModalForDirectAccess(properties) {
   document.body.classList.add("turbo-modal-dialog-direct-access")
 
   const dialog = createDialog(location.href, properties)
-  document.body.appendChild(dialog)
+  activeElement.appendChild(dialog)
   dialog.showModal()
   activeDialog = dialog
 }
@@ -226,21 +226,22 @@ function openModalForDirectAccess(properties) {
 // --- Activation ---
 
 function activate(element) {
-  if (initialized) {
-    if (element !== activeElement) {
-      console.warn(
-        "turbo-modal-dialog: multiple <turbo-modal-dialog> elements detected. " +
-        "Only the first one is active; others are ignored."
-      )
-    }
-    return
+  // Warn about true coexistence (two markers connected at the same time),
+  // but allow rebinding when Turbo replaces <body> and a fresh marker
+  // takes the previous one's place.
+  if (initialized && activeElement && activeElement !== element && activeElement.isConnected) {
+    console.warn(
+      "turbo-modal-dialog: multiple <turbo-modal-dialog> elements detected. " +
+      "Only the most-recently-connected one is used."
+    )
   }
-
-  initialized = true
   activeElement = element
 
   loadLocalPathConfiguration(element)
   loadRemotePathConfiguration(element)
+
+  if (initialized) return
+  initialized = true
 
   // Wire up the iframe-presentation polyfill.
   iframeNavigation.start({
