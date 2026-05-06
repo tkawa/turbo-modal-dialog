@@ -219,6 +219,19 @@ body.turbo-modal-dialog-direct-access > *:not(turbo-modal-dialog) {
 }
 
 /*
+ * Lock the underlying page's scroll while a modal is open. The HTML
+ * spec for <dialog> is silent about scroll behavior, so the default
+ * lets wheel and arrow keys scroll the body underneath — jarring and
+ * inconsistent with native iOS / Android modal semantics where the
+ * background is frozen. Lock via :has() so this stays declarative and
+ * tracks the dialog's [open] state automatically.
+ */
+
+html:has(turbo-modal-dialog dialog.modal-dialog[open]) {
+  overflow: hidden;
+}
+
+/*
  * View Transition pseudo-elements and @keyframes — necessarily global,
  * but uniquely named after this library's view-transition-name.
  *

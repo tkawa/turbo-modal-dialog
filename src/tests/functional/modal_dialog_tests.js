@@ -52,6 +52,43 @@ test.describe("modal dialog", () => {
     await expect(page.locator(".modal-dialog__title")).toHaveText("Modal Navigation")
   })
 
+  test("body scroll is locked while a modal is open", async ({ page }) => {
+    await page.goto("/")
+    // Make the page scrollable for the test.
+    await page.evaluate(() => {
+      const tall = document.createElement("div")
+      tall.style.height = "5000px"
+      document.body.appendChild(tall)
+    })
+
+    // Sanity check: wheel scrolls the page when no modal is open.
+    await page.mouse.move(50, 50)
+    await page.mouse.wheel(0, 300)
+    await page.waitForTimeout(100)
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+    await page.evaluate(() => window.scrollTo(0, 0))
+
+    // Open the modal.
+    await page.click("#open-modal")
+    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+
+    // <html> should now be locked.
+    const overflow = await page.evaluate(() => getComputedStyle(document.documentElement).overflow)
+    expect(overflow).toBe("hidden")
+
+    // Wheel input must not scroll the page underneath the modal.
+    await page.mouse.move(50, 50)
+    await page.mouse.wheel(0, 300)
+    await page.waitForTimeout(100)
+    expect(await page.evaluate(() => window.scrollY)).toBe(0)
+
+    // Closing the modal restores normal scroll.
+    await page.click(".modal-dialog__close-button")
+    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    const overflowAfter = await page.evaluate(() => getComputedStyle(document.documentElement).overflow)
+    expect(overflowAfter).not.toBe("hidden")
+  })
+
   test("stylesheet ships a prefers-reduced-motion override", async ({ page }) => {
     // The View Transition pseudo-elements only exist mid-transition, so a
     // runtime animation-duration check would be flaky. Verify instead that
