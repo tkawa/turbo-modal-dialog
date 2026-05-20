@@ -1,8 +1,8 @@
 # turbo-modal-dialog
 
-Present Turbo Drive navigations as modals — bringing a [Hotwire Native–compatible](https://native.hotwired.dev) approach to the web.
+Present any URL as a modal by declaring it in your Path Configuration. The URL stays a first-class permalink — browser back/forward, sharing, refresh, and deep linking all work — and the same configuration drives [Hotwire Native](https://native.hotwired.dev) iOS / Android apps, so a single JSON declaration gives matched modal UX across web and native.
 
-URL patterns can be marked as modal in a Path Configuration (the same JSON format Hotwire Native apps use). Matching navigations open in a `<dialog>` instead of replacing the page, mirroring how native apps present modal screens.
+Matching navigations open in a `<dialog>` containing an `<iframe>` for the URL's normal Rails view, instead of replacing the page. The modal is just a presentation choice for an ordinary URL — your controller serves the same HTML whether the URL is reached via in-app navigation, direct access, refresh, or a crawler.
 
 ## Features
 
@@ -133,6 +133,15 @@ page, because your controller serves it as a plain HTML response
 either way. The same URL works as both: the path-configuration only
 decides how it's *presented*.
 
+That removes one historical reason to *avoid* modals (loss of URL
+state). The remaining reasons still apply: **a modal is a mode**, and
+modes carry a real cognitive cost. The user has to track that they're
+"in" a modal, can't freely reference other parts of the app, and
+can't compare multiple items side-by-side. Treat "full page" as the
+default, and reach for "modal" only when you have an active reason
+— see the use cases below for typical ones, and *What doesn't fit*
+for the patterns to avoid.
+
 That leaves two design questions:
 
 **Modal vs full page** — choose a modal when the screen makes sense as
@@ -140,8 +149,8 @@ an extension of what the user is already on: peeking at one item from
 a list they'll keep browsing, completing a focused side-task without
 leaving the underlying workflow. Choose a full page when the URL is
 the experience itself — long-form content, hierarchical starting
-points, landing pages. Because shareability and SEO are no longer a
-factor, "modal" works for many more URLs than usual.
+points, landing pages, or anything users want to keep visible while
+working in another part of the app.
 
 **Sheet vs full-screen** — within modal cases, sheet styles (`large`,
 `form_sheet`, `medium`, `page_sheet`) keep some of the underlying
@@ -223,7 +232,10 @@ embedding.
 
 `large` fits product / item detail comfortably (specs, reviews,
 descriptions) while keeping part of the underlying list visible —
-reinforcing "close and browse the next one".
+reinforcing "close and browse the next one". Use this only when
+users typically view one item at a time; in domains where users
+compare items side-by-side (hardware specs, real estate, …), prefer
+a full page so multiple items can be opened in parallel tabs.
 
 ### Visual media — photos, videos, hero images
 
@@ -259,10 +271,26 @@ case.
 
 ## What doesn't fit the modal pattern
 
+### Can't (technical limits)
+
 | Flow | Why not |
 |---|---|
 | OAuth / OIDC redirects to third-party IdPs (Google, Apple, GitHub, …) | Provider sends `X-Frame-Options: DENY` / `frame-ancestors 'none'` to block clickjacking. There is no way around this — use a top-level redirect or a popup window with `postMessage` instead. |
 | Stripe legacy hosted Checkout, Payment Links | Same reason — full-page hosted UIs that refuse iframe embedding. Use Stripe Elements or Embedded Checkout instead. |
+
+### Shouldn't (design anti-patterns)
+
+These are *possible* but degrade UX. The underlying issue is that
+modals are a mode, and modes are costly when imposed on users who
+didn't ask for one or who need parallel access to the page underneath.
+
+| Flow | Why not |
+|---|---|
+| Auth-wall — forcing sign-in *during* another task | A modal not initiated by the user is the textbook "don't mode me in" violation. Redirect to a sign-in page, then back to the original URL, instead. |
+| Reference / help / documentation pages | Users often want to keep these visible while working in another part of the app. Modal turns reference into interruption. |
+| Search results, index, or comparison views | Users may want to open several items in parallel tabs. Modal forces sequential viewing. |
+| Quick edits of a single field (rename, status toggle) | Inline edit is more modeless. Reserve modals for substantial forms with a clear "complete or cancel" boundary. |
+| Long-form content (articles, terms of service users actually read) | Reading takes time, and modes have ongoing cognitive cost. Use a full page. |
 
 ## How it works
 
@@ -293,6 +321,10 @@ The library splits responsibilities between the browser back/forward buttons and
 - An in-modal back button (rendered automatically when the modal stack has depth > 1) is the way to step back through multi-page modal flows.
 
 The address bar still tracks the current modal page (via `history.replaceState` from the in-modal navigation), so refresh, bookmark, and share links continue to deep-link to the displayed modal page.
+
+## Why this library
+
+For the longer pitch — the problem framing, why the modal-as-URL reframe matters, comparison with adjacent solutions, and honest discussion of what the library does not solve — see [docs/why-this-library.md](docs/why-this-library.md).
 
 ## License
 
