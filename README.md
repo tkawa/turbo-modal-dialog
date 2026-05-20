@@ -122,6 +122,148 @@ Example:
 }
 ```
 
+## Choosing a presentation
+
+A URL listed in your Path Configuration is **a first-class permalink
+and a modal at the same time**. Direct access — search hit, shared
+link, refresh — opens it as a modal over a fallback page; in-app link
+clicks open it as a modal over whatever screen the user was already
+on. Crawlers, OGP scrapers, and sitemaps see the URL like any other
+page, because your controller serves it as a plain HTML response
+either way. The same URL works as both: the path-configuration only
+decides how it's *presented*.
+
+That leaves two design questions:
+
+**Modal vs full page** — choose a modal when the screen makes sense as
+an extension of what the user is already on: peeking at one item from
+a list they'll keep browsing, completing a focused side-task without
+leaving the underlying workflow. Choose a full page when the URL is
+the experience itself — long-form content, hierarchical starting
+points, landing pages. Because shareability and SEO are no longer a
+factor, "modal" works for many more URLs than usual.
+
+**Sheet vs full-screen** — within modal cases, sheet styles (`large`,
+`form_sheet`, `medium`, `page_sheet`) keep some of the underlying
+context visible and invite easy dismissal, fitting brief and
+interruptible work. `full` claims the whole viewport, fitting
+immersive content (visual media) and multistep precision tasks
+(markup, editing). This mirrors [Apple HIG's Sheet vs Full-screen
+distinction](https://developer.apple.com/design/human-interface-guidelines/modality).
+
+## Typical use cases
+
+### Forms (new / edit)
+
+```json
+{
+  "patterns": ["/new$", "/edit$"],
+  "properties": { "context": "modal", "modal_style": "form_sheet" }
+}
+```
+
+`form_sheet` is narrower on desktop (matching iOS form-sheet) and near
+full-screen on mobile — well-suited to short input forms.
+
+### First-party authentication (email / password, MFA, password reset)
+
+```json
+{
+  "patterns": ["/sign_in", "/sessions/new", "/password/.+", "/two_factor/.+"],
+  "properties": { "context": "modal", "modal_style": "form_sheet" }
+}
+```
+
+Sign-in, password reset, and MFA enrollment are short form interactions
+served from your own origin, so `form_sheet` is the same fit as any
+other short form. (OAuth flows to third-party IdPs cannot run inside a
+modal — see *Doesn't fit* below.)
+
+### Passkey (WebAuthn) registration and authentication
+
+```json
+{
+  "patterns": ["/passkeys/new", "/sessions/passkey"],
+  "properties": { "context": "modal", "modal_style": "form_sheet" }
+}
+```
+
+`navigator.credentials.get()` and `.create()` work inside same-origin
+iframes via the default Permissions Policy — no `allow` attribute is
+needed. The browser's biometric / security-key prompt renders above
+the modal as a system-level dialog.
+
+### Payments (Stripe Elements, Embedded Checkout, 3-D Secure)
+
+```json
+{
+  "patterns": ["/checkout", "/payments/new"],
+  "properties": {
+    "context": "modal",
+    "modal_style": "large",
+    "modal_dismiss_gesture_enabled": false
+  }
+}
+```
+
+`large` is roomy enough for a 3-D Secure challenge iframe (EMVCo's
+challenge sizes start at 250×400 px). `modal_dismiss_gesture_enabled:
+false` prevents accidental ESC / backdrop dismissal mid-payment. Pair
+with Stripe Elements or Embedded Checkout, both designed for iframe
+embedding.
+
+### Item detail browsed from a list (text-heavy)
+
+```json
+{
+  "patterns": ["/products/\\d+$"],
+  "properties": { "context": "modal", "modal_style": "large" }
+}
+```
+
+`large` fits product / item detail comfortably (specs, reviews,
+descriptions) while keeping part of the underlying list visible —
+reinforcing "close and browse the next one".
+
+### Visual media — photos, videos, hero images
+
+```json
+{
+  "patterns": ["/photos/\\d+$", "/videos/\\d+$"],
+  "properties": { "context": "modal", "modal_style": "full" }
+}
+```
+
+`full` because the content itself wants the whole viewport — matches
+the HIG "presenting videos, photos, or camera views" case and iOS
+Photos.app's full-screen presentation.
+
+### Markup / editing flows
+
+```json
+{
+  "patterns": ["/attachments/\\d+/markup", "/documents/\\d+/sign"],
+  "properties": {
+    "context": "modal",
+    "modal_style": "full",
+    "modal_dismiss_gesture_enabled": false
+  }
+}
+```
+
+`full` so precision pinch / drag interactions get the entire screen.
+`modal_dismiss_gesture_enabled: false` so an accidental backdrop tap
+or ESC doesn't drop the user out of a half-finished edit. Matches the
+HIG "multistep task like marking up a document or editing a photo"
+case.
+
+## What doesn't fit the modal pattern
+
+| Flow | Why not |
+|---|---|
+| OAuth / OIDC redirects to third-party IdPs (Google, Apple, GitHub, …) | Provider sends `X-Frame-Options: DENY` / `frame-ancestors 'none'` to block clickjacking. There is no way around this — use a top-level redirect or a popup window with `postMessage` instead. |
+| Stripe legacy hosted Checkout, Payment Links | Same reason — full-page hosted UIs that refuse iframe embedding. Use Stripe Elements or Embedded Checkout instead. |
+
 ## How it works
 
 When a Turbo Drive navigation matches a modal rule:
