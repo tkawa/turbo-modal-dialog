@@ -197,18 +197,51 @@ the `<dialog>`. This deserves explanation.
 
 **Why iframe instead of inline DOM injection:**
 
-- **JS isolation.** The modal's view runs in its own browsing context.
-  Stimulus controllers, Turbo, scripts, third-party SDKs (Stripe,
-  WebAuthn flows) don't interfere with the parent.
-- **CSS isolation.** Modal page styles can't leak into the parent and
-  vice versa.
-- **Independent `<head>`.** The modal can load its own stylesheets,
-  meta tags, OGP, title — without modifying the parent.
-- **It mirrors Hotwire Native semantics exactly.** Native modal stacks
-  use a separate WebView for the modal. iframe is the web equivalent.
-- **Server view stays agnostic.** The modal URL's view doesn't need
-  to know it's inside a modal — it gets a fresh document to render
-  into.
+Injecting the modal URL's body content into a `<dialog>` in the
+parent document — e.g. by intercepting `turbo:before-render` and
+overriding `event.detail.render` — is the obvious first attempt. It
+breaks down structurally:
+
+- **It collides with Turbo's "one page per URL" model.** Turbo still
+  treats the visit as a page replacement, so making the page look
+  like a modal requires coordinating across `turbo:before-render`,
+  `turbo:before-cache` (to keep the dialog out of cached snapshots),
+  `turbo:load`, and `popstate` — with hand-rolled state flags to
+  tell modal-open, modal-close-by-user, and modal-close-by-popstate
+  apart.
+- **Parent and modal share one history.** Intra-modal navigation has
+  to manually drive `history.pushState` / `replaceState`, and modal
+  dismissal has to be carefully distinguished from regular back
+  navigation. Each edge case becomes a new flag.
+- **The modal URL's view becomes modal-aware.** Either the
+  controller serves a "modal version" of the page, or the JS layer
+  picks out a fragment of the response (`<main>` / a specific
+  container) and hopes the markup convention holds across all modal
+  URLs.
+
+`<dialog>` + `<iframe>` removes the structural mismatch instead of
+patching its symptoms:
+
+- **The modal lives outside the parent's render pipeline.** The
+  parent's Turbo never thinks the page changed when a modal opens,
+  so the modal layer needs no `turbo:before-render` /
+  `turbo:before-cache` hooks at all.
+- **The view convention matches the official Hotwire Native demo.**
+  Both approaches need *some* convention so the modal context can
+  show only the modal-appropriate subset of the page. Inline
+  injection picks a container positively (extract `<main>` or a
+  named region). The iframe approach hides chrome negatively —
+  elements tagged in the markup are CSS-hidden inside the modal.
+  The library defaults to `hide@native`, the convention used in
+  `hotwired/hotwire-native-demo` (the canonical Rails reference
+  for Hotwire Native apps). The class itself is not mandated by
+  the framework and is swappable via `content-stylesheet`; the
+  default exists so apps following the demo's pattern reuse their
+  existing markup with no new view work.
+- **Hotwire Native parity is structural.** iOS / Android present
+  modals as a separate WebView stack; `<iframe>` is the web
+  analogue. The same Path Configuration drives both with no
+  conceptual translation.
 
 **What iframe gives up:**
 

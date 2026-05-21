@@ -94,6 +94,25 @@ Place the custom element in your layout, with configuration:
 
 `<script type="application/json">` — inline (local) Path Configuration. Used immediately on first load. If `path-configuration` URL is also set, the remote version overrides this once fetched.
 
+### Hiding chrome from the modal view
+
+The modal iframe loads the full HTML the controller returns. Elements that shouldn't appear inside the modal — global navigation, page headers, footer chrome — should be tagged with `hide@native` so the modal stylesheet can hide them:
+
+```erb
+<header class="hide@native">...</header>
+```
+
+The library defaults to the convention used in the official [Hotwire Native Rails demo](https://github.com/hotwired/hotwire-native-demo): tag elements with `hide@native`, and a stylesheet maps that class to `display: none` in the modal context. A baseline `.hide\@native { display: none !important }` is injected into every modal iframe so the convention works out of the box. If your app already follows the demo's pattern, point `content-stylesheet` at your existing `native.css` to inherit any additional rules. If you prefer a different class or mechanism, supply a stylesheet that declares whatever hiding rules you want — `hide@native` itself is not mandated by the Hotwire Native framework, only popularized by the demo.
+
+If your layout treats "everything that isn't `<main>` is chrome," a single rule via `content-stylesheet` is enough and per-element tagging isn't needed:
+
+```css
+/* served at the URL pointed to by content-stylesheet */
+body > *:not(main) {
+  display: none !important;
+}
+```
+
 ## Path Configuration
 
 Reuses [Hotwire Native's Path Configuration](https://native.hotwired.dev/reference/path-configuration) format. Modal-related rule properties:
