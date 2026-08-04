@@ -95,11 +95,11 @@ function createDialog(url, properties) {
   const dismissGestureEnabled = properties.modal_dismiss_gesture_enabled !== false
 
   const dialog = document.createElement("dialog")
-  dialog.className = `modal-dialog modal-dialog--${modalStyle}`
-  if (!animated) dialog.classList.add("modal-dialog--no-animation")
+  dialog.className = `turbo-modal-dialog__dialog turbo-modal-dialog__dialog--${modalStyle}`
+  if (!animated) dialog.classList.add("turbo-modal-dialog__dialog--no-animation")
 
   const header = document.createElement("div")
-  header.className = "modal-dialog__header"
+  header.className = "turbo-modal-dialog__header"
 
   // In-modal back button — the way to navigate the modal stack now that
   // browser back is reserved for "leave the modal entirely". Starts
@@ -107,25 +107,25 @@ function createDialog(url, properties) {
   // centered); shown when TurboIframe.canGoBack becomes true after an
   // intra-modal link click pushes onto the modal stack.
   const backButton = document.createElement("button")
-  backButton.className = "modal-dialog__back-button modal-dialog__back-button--invisible"
+  backButton.className = "turbo-modal-dialog__back-button turbo-modal-dialog__back-button--invisible"
   backButton.type = "button"
   backButton.setAttribute("aria-label", "Back")
   backButton.innerHTML = "&#10094;"
   header.appendChild(backButton)
 
   const title = document.createElement("span")
-  title.className = "modal-dialog__title"
+  title.className = "turbo-modal-dialog__title"
   header.appendChild(title)
 
   const closeButton = document.createElement("button")
-  closeButton.className = "modal-dialog__close-button"
+  closeButton.className = "turbo-modal-dialog__close-button"
   closeButton.type = "button"
   closeButton.setAttribute("aria-label", "Close")
   closeButton.innerHTML = "&#x2715;"
   header.appendChild(closeButton)
 
   const iframe = document.createElement("iframe")
-  iframe.className = "modal-dialog__iframe"
+  iframe.className = "turbo-modal-dialog__iframe"
   iframe.src = url
 
   // Inject host-specific styles into iframe on each load.
@@ -148,7 +148,7 @@ function createDialog(url, properties) {
     }
 
     // Reveal iframe now that nav is hidden
-    iframe.classList.add("modal-dialog__iframe--loaded")
+    iframe.classList.add("turbo-modal-dialog__iframe--loaded")
   })
 
   // Let the polyfill wire up cross-frame events (turbo:iframe-content-loaded,
@@ -254,7 +254,7 @@ function activate(element) {
   })
 
   document.addEventListener("turbo:iframe-content-loaded", (event) => {
-    const titleEl = activeDialog?.querySelector(".modal-dialog__title")
+    const titleEl = activeDialog?.querySelector(".turbo-modal-dialog__title")
     if (titleEl) titleEl.textContent = event.detail.title || ""
   })
 
@@ -263,10 +263,10 @@ function activate(element) {
   // semantics, and reflect the back-button availability.
   document.addEventListener("turbo:iframe-navigate", (event) => {
     if (!activeDialog) return
-    const iframe = activeDialog.querySelector("iframe.modal-dialog__iframe")
+    const iframe = activeDialog.querySelector("iframe.turbo-modal-dialog__iframe")
     iframe?.contentWindow?.__navigateInIframe?.(event.detail.url)
-    const back = activeDialog.querySelector(".modal-dialog__back-button")
-    if (back) back.classList.toggle("modal-dialog__back-button--invisible", !event.detail.canGoBack)
+    const back = activeDialog.querySelector(".turbo-modal-dialog__back-button")
+    if (back) back.classList.toggle("turbo-modal-dialog__back-button--invisible", !event.detail.canGoBack)
   })
 
   document.addEventListener("turbo:iframe-dismissed", (event) => {

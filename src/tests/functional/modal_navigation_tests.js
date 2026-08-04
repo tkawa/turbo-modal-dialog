@@ -11,7 +11,7 @@ test.describe("modal navigation", () => {
       title: "Modal Navigation"
     })
 
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-modal").click()
     await nextEventNamed(page, "turbo:iframe-content-loaded", {
       url: "http://localhost:9000/modals/second",
@@ -22,12 +22,12 @@ test.describe("modal navigation", () => {
   test("modal title updates after iframe navigation", async ({ page }) => {
     await page.goto("/")
     await page.click("#open-modal")
-    await expect(page.locator(".modal-dialog__title")).toHaveText("Modal Navigation")
+    await expect(page.locator(".turbo-modal-dialog__title")).toHaveText("Modal Navigation")
 
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-modal").click()
 
-    await expect(page.locator(".modal-dialog__title")).toHaveText("Modal Navigation #2")
+    await expect(page.locator(".turbo-modal-dialog__title")).toHaveText("Modal Navigation #2")
   })
 
   test("parent URL tracks intra-modal navigation", async ({ page }) => {
@@ -35,7 +35,7 @@ test.describe("modal navigation", () => {
     await page.click("#open-modal")
     await expect(page).toHaveURL("/modals/first")
 
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-modal").click()
     await expect(iframe.locator("body")).toContainText("Modal Navigation #2")
 
@@ -47,37 +47,37 @@ test.describe("modal navigation", () => {
     await page.goto("/")
     await page.click("#open-modal")
     // No back available initially.
-    await expect(page.locator(".modal-dialog__back-button")).toBeHidden()
+    await expect(page.locator(".turbo-modal-dialog__back-button")).toBeHidden()
 
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-modal").click()
     await expect(iframe.locator("body")).toContainText("Modal Navigation #2")
     await expect(page).toHaveURL("/modals/second")
 
     // Now back button is shown.
-    await expect(page.locator(".modal-dialog__back-button")).toBeVisible()
+    await expect(page.locator(".turbo-modal-dialog__back-button")).toBeVisible()
 
     // Clicking it pops the stack: iframe shows #1 again, URL syncs.
-    await page.click(".modal-dialog__back-button")
+    await page.click(".turbo-modal-dialog__back-button")
     await expect(iframe.locator("body")).toContainText("Modal Navigation")
     await expect(iframe.locator("body")).not.toContainText("Modal Navigation #2")
     await expect(page).toHaveURL("/modals/first")
 
     // Back at depth 1 — back button hides itself.
-    await expect(page.locator(".modal-dialog__back-button")).toBeHidden()
+    await expect(page.locator(".turbo-modal-dialog__back-button")).toBeHidden()
   })
 
   test("browser back from intra-modal page dismisses the modal entirely", async ({ page }) => {
     await page.goto("/")
     await page.click("#open-modal")
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-modal").click()
     await expect(page).toHaveURL("/modals/second")
 
     // Browser back skips the in-modal stack and dismisses the whole modal,
     // because intra-modal navigation does not grow joint session history.
     await page.goBack()
-    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
     await expect(page).toHaveURL("/")
   })
 
@@ -85,24 +85,24 @@ test.describe("modal navigation", () => {
     await page.goto("/")
     await page.click("#open-modal")
 
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-modal").click()
     await expect(iframe.locator("body")).toContainText("Modal Navigation #2")
 
-    await page.click(".modal-dialog__close-button")
-    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    await page.click(".turbo-modal-dialog__close-button")
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
     await expect(page).toHaveURL("/")
   })
 
   test("non-modal link inside modal dismisses modal and navigates parent", async ({ page }) => {
     await page.goto("/")
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
 
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-non-modal").click()
 
-    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
     await expect(page.locator("h1")).toHaveText("Basic Navigation")
     await expect(page).toHaveURL("/non-modal")
   })

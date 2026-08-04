@@ -5,51 +5,51 @@ test.describe("modal dialog", () => {
     await page.goto("/")
     await page.click("#open-modal")
 
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
-    await expect(page.locator("dialog.modal-dialog iframe")).toBeAttached()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog iframe")).toBeAttached()
   })
 
   test("closing the dialog removes it from the DOM", async ({ page }) => {
     await page.goto("/")
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
 
-    await page.click(".modal-dialog__close-button")
+    await page.click(".turbo-modal-dialog__close-button")
 
-    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
   })
 
   test("reopening a modal after closing works", async ({ page }) => {
     await page.goto("/")
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
 
-    await page.click(".modal-dialog__close-button")
-    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    await page.click(".turbo-modal-dialog__close-button")
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
 
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
   })
 
   test("modal_style large is applied by default", async ({ page }) => {
     await page.goto("/")
     await page.click("#open-modal")
 
-    await expect(page.locator("dialog.modal-dialog.modal-dialog--large[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog.turbo-modal-dialog__dialog--large[open]")).toBeVisible()
   })
 
   test("/new pattern modal uses form_sheet style", async ({ page }) => {
     await page.goto("/")
     await page.click("#open-form")
 
-    await expect(page.locator("dialog.modal-dialog.modal-dialog--form_sheet[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog.turbo-modal-dialog__dialog--form_sheet[open]")).toBeVisible()
   })
 
   test("modal header shows page title from iframe", async ({ page }) => {
     await page.goto("/")
     await page.click("#open-modal")
 
-    await expect(page.locator(".modal-dialog__title")).toHaveText("Modal Navigation")
+    await expect(page.locator(".turbo-modal-dialog__title")).toHaveText("Modal Navigation")
   })
 
   test("body scroll is locked while a modal is open", async ({ page }) => {
@@ -70,7 +70,7 @@ test.describe("modal dialog", () => {
 
     // Open the modal.
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
 
     // <html> should now be locked.
     const overflow = await page.evaluate(() => getComputedStyle(document.documentElement).overflow)
@@ -83,8 +83,8 @@ test.describe("modal dialog", () => {
     expect(await page.evaluate(() => window.scrollY)).toBe(0)
 
     // Closing the modal restores normal scroll.
-    await page.click(".modal-dialog__close-button")
-    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    await page.click(".turbo-modal-dialog__close-button")
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
     const overflowAfter = await page.evaluate(() => getComputedStyle(document.documentElement).overflow)
     expect(overflowAfter).not.toBe("hidden")
   })

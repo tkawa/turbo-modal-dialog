@@ -23,20 +23,20 @@ test.describe("TurboIframe programmatic API", () => {
     expect(await page.evaluate(() => window.TurboIframe.isPresented)).toBe(false)
 
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
     expect(await page.evaluate(() => window.TurboIframe.isPresented)).toBe(true)
 
-    await page.click(".modal-dialog__close-button")
-    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    await page.click(".turbo-modal-dialog__close-button")
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
     expect(await page.evaluate(() => window.TurboIframe.isPresented)).toBe(false)
   })
 
   test("canGoBack reflects modal stack depth", async ({ page }) => {
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
     expect(await page.evaluate(() => window.TurboIframe.canGoBack)).toBe(false)
 
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-modal").click()
     await expect(page).toHaveURL("/modals/second")
     expect(await page.evaluate(() => window.TurboIframe.canGoBack)).toBe(true)
@@ -44,24 +44,24 @@ test.describe("TurboIframe programmatic API", () => {
 
   test("dismiss() programmatically closes the modal", async ({ page }) => {
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
 
     await page.evaluate(() => window.TurboIframe.dismiss("/non-modal"))
-    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
   })
 
   test("dismissAndVisit() closes the modal and navigates the parent", async ({ page }) => {
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
 
     await page.evaluate(() => window.TurboIframe.dismissAndVisit("/non-modal"))
-    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
     await expect(page).toHaveURL("/non-modal")
   })
 
   test("navigateModal() pushes onto the stack and updates the parent URL", async ({ page }) => {
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
 
     await page.evaluate(() =>
       window.TurboIframe.navigateModal(new URL("/modals/second", location.href).href)
@@ -72,7 +72,7 @@ test.describe("TurboIframe programmatic API", () => {
 
   test("back() pops the modal stack and updates the parent URL", async ({ page }) => {
     await page.click("#open-modal")
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-modal").click()
     await expect(page).toHaveURL("/modals/second")
 
@@ -87,6 +87,6 @@ test.describe("TurboIframe programmatic API", () => {
 
     await page.evaluate(() => window.TurboIframe.back())
     await expect(page).toHaveURL("/modals/first")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
   })
 })

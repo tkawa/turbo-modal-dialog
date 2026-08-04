@@ -33,10 +33,10 @@ test.describe("custom events", () => {
 
   test("turbo:iframe-navigate fires on intra-modal link click", async ({ page }) => {
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
     await clearEventLogs(page)
 
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-modal").click()
 
     const detail = await nextEventNamed(page, "turbo:iframe-navigate")
@@ -46,10 +46,10 @@ test.describe("custom events", () => {
 
   test("turbo:before-iframe-dismiss fires before turbo:iframe-dismissed (close button)", async ({ page }) => {
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
     await clearEventLogs(page)
 
-    await page.click(".modal-dialog__close-button")
+    await page.click(".turbo-modal-dialog__close-button")
 
     await nextEventNamed(page, "turbo:before-iframe-dismiss")
     const dismissed = await nextEventNamed(page, "turbo:iframe-dismissed")
@@ -58,7 +58,7 @@ test.describe("custom events", () => {
 
   test("turbo:iframe-dismissed fires with null targetUrl on browser back", async ({ page }) => {
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
     await clearEventLogs(page)
 
     await page.goBack()
@@ -68,10 +68,10 @@ test.describe("custom events", () => {
 
   test("turbo:iframe-dismissed fires with target URL on dismissAndVisit (intra-iframe non-modal link)", async ({ page }) => {
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
     await clearEventLogs(page)
 
-    const iframe = page.frameLocator("dialog.modal-dialog iframe")
+    const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-non-modal").click()
 
     const detail = await nextEventNamed(page, "turbo:iframe-dismissed")
@@ -84,17 +84,17 @@ test.describe("custom events", () => {
 
     // Give the system a moment, then assert no modal was opened.
     await page.waitForTimeout(200)
-    await expect(page.locator("dialog.modal-dialog")).toHaveCount(0)
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
   })
 
   test("preventing turbo:before-iframe-dismiss keeps the modal open", async ({ page }) => {
     await page.click("#open-modal")
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
 
     await cancelNextEvent(page, "turbo:before-iframe-dismiss")
-    await page.click(".modal-dialog__close-button")
+    await page.click(".turbo-modal-dialog__close-button")
 
     await page.waitForTimeout(200)
-    await expect(page.locator("dialog.modal-dialog[open]")).toBeVisible()
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
   })
 })
