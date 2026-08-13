@@ -269,6 +269,15 @@ function activate(element) {
     if (back) back.classList.toggle("turbo-modal-dialog__back-button--invisible", !event.detail.canGoBack)
   })
 
+  // A refresh of the currently presented URL was proposed in the parent
+  // (Turbo Streams refresh broadcast — the parent's baseURI is the modal
+  // URL while presented). Refresh the modal content in place through the
+  // iframe's own Turbo session instead of rebuilding the dialog.
+  document.addEventListener("turbo:iframe-refresh", () => {
+    const win = activeDialog?.querySelector("iframe.turbo-modal-dialog__iframe")?.contentWindow
+    win?.Turbo?.session?.refresh(win.document.baseURI)
+  })
+
   document.addEventListener("turbo:iframe-dismissed", (event) => {
     const { targetUrl } = event.detail
     const visit = targetUrl ? () => window.Turbo.visit(targetUrl, { action: "replace" }) : null

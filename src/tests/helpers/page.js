@@ -6,6 +6,7 @@ const TURBO_IFRAME_EVENTS = [
   "turbo:before-iframe-present",
   "turbo:iframe-presented",
   "turbo:iframe-content-loaded",
+  "turbo:iframe-refresh",
   "turbo:iframe-navigate",
   "turbo:before-iframe-dismiss",
   "turbo:iframe-dismissed"

@@ -29,6 +29,14 @@
 //     detail: { url, title }
 //     Iframe content (re)loaded. Useful for syncing modal title.
 //
+//   turbo:iframe-refresh
+//     detail: { url }
+//     A visit to the currently presented URL was proposed in the parent —
+//     typically a Turbo Streams refresh broadcast received by the
+//     underlying page (document.baseURI is the modal URL while presented).
+//     Host should refresh the iframe's content through the iframe's own
+//     Turbo session instead of re-presenting.
+//
 //   turbo:before-iframe-dismiss  (cancelable)
 //     Fires before iframe is dismissed. preventDefault to keep open.
 //
@@ -213,6 +221,18 @@ function handleBeforeVisit(event) {
   if (!properties) return
 
   event.preventDefault()
+
+  // A proposal for the URL that is already presented — typically a Turbo
+  // Streams refresh broadcast received by the underlying page, whose
+  // baseURI is the modal URL while presented. Re-presenting would tear
+  // down and rebuild the dialog; delegate to the iframe's own Turbo
+  // session instead, so refresh semantics (morph, data-turbo-permanent)
+  // apply to the modal content.
+  if (isPresented && url === location.href) {
+    dispatch("turbo:iframe-refresh", { url })
+    return
+  }
+
   if (!dispatchCancelable("turbo:before-iframe-present", { url, properties })) return
 
   if (preIframeUrl === null && location.href !== url) {
@@ -294,7 +314,18 @@ export function bindFrame(iframe) {
         }
         const url = event.detail.url
         event.preventDefault()
-        if (window.parent.TurboIframe.matchesUrl(url)) {
+        if (url === location.href) {
+          // Same-URL visit — a refresh (Turbo Streams broadcast inside
+          // the iframe, or delegated from the parent) or a re-clicked
+          // link. Re-issue as replace: Turbo treats a same-URL replace
+          // visit as a page refresh, honoring morph and
+          // data-turbo-permanent when configured, and the iframe's
+          // session history stays length 1. Routing through
+          // navigateModal instead would no-op (__navigateInIframe skips
+          // same-URL) and leave a duplicate modal-stack entry behind.
+          __programmaticReplace = true
+          Turbo.visit(url, { action: "replace" })
+        } else if (window.parent.TurboIframe.matchesUrl(url)) {
           // Intra-modal link click — push onto parent's modal stack and
           // re-trigger the same URL as a replace so iframe history stays
           // length 1. The parent will dispatch turbo:iframe-navigate; the
