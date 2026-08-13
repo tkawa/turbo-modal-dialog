@@ -35,7 +35,10 @@
 //     typically a Turbo Streams refresh broadcast received by the
 //     underlying page (document.baseURI is the modal URL while presented).
 //     Host should refresh the iframe's content through the iframe's own
-//     Turbo session instead of re-presenting.
+//     Turbo session instead of re-presenting. The underlying page cannot
+//     be refreshed at this point (fetching baseURI would return the modal
+//     page), so the polyfill records the swallowed refresh and replays it
+//     when a browser-back dismissal later uncovers the underlying page.
 //
 //   turbo:before-iframe-dismiss  (cancelable)
 //     Fires before iframe is dismissed. preventDefault to keep open.
@@ -126,6 +129,10 @@ let matchUrlFn = null
 // dismiss / present. Forward-restored presentations start a fresh stack
 // (we have no way to reconstruct a previous in-memory stack from history).
 let modalStack = []
+// A parent-received refresh was delegated to the iframe while presented.
+// The underlying page is stale; a browser-back dismissal replays the
+// refresh (explicit dismiss already fetches fresh HTML via its visit).
+let refreshedWhilePresented = false
 
 export function start({ matchUrl }) {
   if (matchUrlFn) return
@@ -157,12 +164,14 @@ export function start({ matchUrl }) {
 function enterPresented(url) {
   isPresented = true
   modalStack = [url]
+  refreshedWhilePresented = false
 }
 
 function exitPresented() {
   preIframeUrl = null
   isPresented = false
   modalStack = []
+  refreshedWhilePresented = false
 }
 
 // --- Programmatic API ---
@@ -229,6 +238,7 @@ function handleBeforeVisit(event) {
   // session instead, so refresh semantics (morph, data-turbo-permanent)
   // apply to the modal content.
   if (isPresented && url === location.href) {
+    refreshedWhilePresented = true
     dispatch("turbo:iframe-refresh", { url })
     return
   }
@@ -261,10 +271,20 @@ function handlePopstate() {
     // page (we never let Turbo replace it during presentation), so
     // Turbo's restoration visit for this URL is redundant. Cancel it
     // so its body replace doesn't race with the host's close animation.
+    //
+    // Exception: when a refresh broadcast was swallowed while presented,
+    // the underlying body is stale. location.href is the underlying URL
+    // again, so hand it to the host as targetUrl — its existing dismiss
+    // path visits it with { action: "replace" }, which Turbo treats as a
+    // page refresh (morph honored), fetching fresh content. The cancel
+    // must happen before the dispatch: without View Transition support
+    // the host starts that visit synchronously, and cancelling afterwards
+    // would kill it.
     if (!dispatchCancelable("turbo:before-iframe-dismiss")) return
-    exitPresented()
-    dispatch("turbo:iframe-dismissed", { targetUrl: null })
     cancelTurboVisit()
+    const targetUrl = refreshedWhilePresented ? location.href : null
+    exitPresented()
+    dispatch("turbo:iframe-dismissed", { targetUrl })
   } else if (!isPresented && properties) {
     // Browser forward to iframe URL — restore presentation (no pushState).
     // Also cancel any in-flight Turbo visit (e.g. the previous back's

@@ -58,4 +58,45 @@ test.describe("refresh while a modal is presented", () => {
     // The same-URL visit must not push a duplicate modal-stack entry
     await expect(page.locator(".turbo-modal-dialog__back-button")).toBeHidden()
   })
+
+  test("browser back after a swallowed refresh refetches the underlying page", async ({ page }) => {
+    await setupEventLog(page)
+    await page.goto("/")
+    await page.click("#open-modal")
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
+    await nextEventNamed(page, "turbo:iframe-content-loaded")
+
+    // Mark the underlying (hidden) page as stale, then deliver a refresh
+    // broadcast — it gets delegated to the iframe, leaving the mark in place.
+    await page.evaluate(() => {
+      document.querySelector("main h1").textContent = "stale"
+      window.Turbo.session.refresh(document.baseURI)
+    })
+    await nextEventNamed(page, "turbo:iframe-refresh")
+
+    await page.goBack()
+
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
+    await expect(page).toHaveURL("/")
+    // The swallowed refresh is replayed on dismissal: fresh content replaces the mark
+    await expect(page.locator("main h1")).toHaveText("Home")
+  })
+
+  test("browser back without a swallowed refresh keeps the underlying page untouched", async ({ page }) => {
+    await page.goto("/")
+    await page.click("#open-modal")
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
+
+    await page.evaluate(() => {
+      document.querySelector("main h1").textContent = "kept"
+    })
+
+    await page.goBack()
+
+    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(0)
+    await expect(page).toHaveURL("/")
+    // No refresh was swallowed, so the fast path applies: no refetch
+    await page.waitForTimeout(300)
+    await expect(page.locator("main h1")).toHaveText("kept")
+  })
 })
