@@ -38,7 +38,8 @@ test.describe("parent-initiated visits while a modal is presented", () => {
   test("canceling turbo:before-iframe-navigate drops a modal-to-modal visit", async ({ page }) => {
     await cancelNextEvent(page, "turbo:before-iframe-navigate")
     await page.evaluate(() => window.Turbo.visit("/modals/second"))
-    await nextEventNamed(page, "turbo:before-iframe-navigate")
+    // The decision point identifies the intercepted parent visit
+    await nextEventNamed(page, "turbo:before-iframe-navigate", { trigger: "parent-visit" })
 
     await expect(page).toHaveURL("/modals/first")
     const frame = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
@@ -58,7 +59,7 @@ test.describe("parent-initiated visits while a modal is presented", () => {
     await cancelNextEvent(page, "turbo:before-iframe-dismiss")
     await page.evaluate(() => window.Turbo.visit("/non-modal"))
     // The decision point received the destination and the trigger
-    const detail = await nextEventNamed(page, "turbo:before-iframe-dismiss", { trigger: "visit" })
+    const detail = await nextEventNamed(page, "turbo:before-iframe-dismiss", { trigger: "parent-visit" })
     expect(detail.targetUrl).toContain("/non-modal")
 
     await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()

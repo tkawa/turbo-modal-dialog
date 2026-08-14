@@ -19,10 +19,12 @@
 //     so the polyfill can wire up cross-frame communication.
 //
 //   turbo:before-iframe-navigate  (cancelable)
-//     detail: { url }
-//     Fires before modal-content navigation — an intra-modal link click,
-//     or a parent-initiated visit to a different modal-pattern URL while
-//     presented. preventDefault to drop the navigation and stay put.
+//     detail: { url, trigger }
+//     Fires before modal-content navigation. preventDefault to drop the
+//     navigation and stay put. trigger identifies the source:
+//     "navigate" (an explicit request — an intra-modal link click or a
+//     navigateModal() call) or "parent-visit" (an intercepted parent
+//     visit proposal to a different modal-pattern URL while presented).
 //
 //   turbo:iframe-navigate
 //     detail: { url, canGoBack }
@@ -54,9 +56,12 @@
 //     leave). targetUrl is where the parent will navigate after dismissal
 //     (null for a popstate dismissal that keeps the restored page).
 //     trigger identifies the source: "dismiss" (✕ / ESC / backdrop /
-//     programmatic dismiss()), "popstate" (browser back), or "visit"
-//     (a navigation leaving the modal — a non-modal link inside the
-//     iframe, or a parent-initiated visit to a non-modal URL).
+//     programmatic dismiss()), "popstate" (browser back), "visit" (an
+//     explicit navigation leaving the modal — a non-modal link inside
+//     the iframe, or a dismissAndVisit() call), or "parent-visit" (an
+//     intercepted parent visit proposal to a non-modal URL while
+//     presented). The explicit/intercepted split lets apps drop ambient
+//     JS-driven visits without blocking the user's own way out.
 //
 //   turbo:iframe-dismissed
 //     detail: { targetUrl }
@@ -89,9 +94,11 @@
 //                             dismissal; turbo:iframe-refresh-deferred
 //                             fires as a notification)
 //   different modal URL     → navigateModal (modal-to-modal, dialog kept;
-//                             droppable via turbo:before-iframe-navigate)
+//                             droppable via turbo:before-iframe-navigate,
+//                             trigger "parent-visit")
 //   non-modal URL           → dismissAndVisit (dismiss, then navigate;
-//                             droppable via turbo:before-iframe-dismiss)
+//                             droppable via turbo:before-iframe-dismiss,
+//                             trigger "parent-visit")
 //
 // Letting a non-modal visit through instead would body-replace the parent
 // and destroy the dialog outside the dismiss lifecycle, leaving
@@ -221,12 +228,12 @@ function dismiss(fallbackUrl) {
   dispatch("turbo:iframe-dismissed", { targetUrl })
 }
 
-function dismissAndVisit(url) {
+function dismissAndVisit(url, trigger = "visit") {
   if (!isPresented) {
     window.Turbo.visit(url, { action: "replace" })
     return
   }
-  if (!dispatchCancelable("turbo:before-iframe-dismiss", { targetUrl: url, trigger: "visit" })) return
+  if (!dispatchCancelable("turbo:before-iframe-dismiss", { targetUrl: url, trigger })) return
 
   exitPresented()
   dispatch("turbo:iframe-dismissed", { targetUrl: url })
@@ -235,10 +242,10 @@ function dismissAndVisit(url) {
 // Push a URL onto the modal stack and tell the host to navigate the
 // iframe to it. The iframe's session history must NOT grow — host calls
 // Turbo.visit(url, { action: "replace" }) inside the iframe.
-function navigateModal(url) {
+function navigateModal(url, trigger = "navigate") {
   if (!isPresented) return
   if (!matchUrlFn(url)) return
-  if (!dispatchCancelable("turbo:before-iframe-navigate", { url })) return
+  if (!dispatchCancelable("turbo:before-iframe-navigate", { url, trigger })) return
   modalStack.push(url)
   if (location.href !== url) {
     history.replaceState(null, "", url)
@@ -274,7 +281,7 @@ function handleBeforeVisit(event) {
     // canceling turbo:before-iframe-dismiss.
     if (isPresented) {
       event.preventDefault()
-      dismissAndVisit(url)
+      dismissAndVisit(url, "parent-visit")
     }
     return
   }
@@ -302,7 +309,7 @@ function handleBeforeVisit(event) {
       // one-parent-entry-per-modal-session history model via
       // replaceState; re-presenting here used to pushState a second
       // modal entry, creating a back-traversal dead zone.
-      navigateModal(url)
+      navigateModal(url, "parent-visit")
     }
     return
   }

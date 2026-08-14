@@ -39,6 +39,10 @@ test.describe("custom events", () => {
     const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-modal").click()
 
+    // The cancelable decision point precedes it, marked as an explicit request
+    const before = await nextEventNamed(page, "turbo:before-iframe-navigate")
+    expect(before.trigger).toBe("navigate")
+
     const detail = await nextEventNamed(page, "turbo:iframe-navigate")
     expect(detail.url).toBe("http://localhost:9000/modals/second")
     expect(detail.canGoBack).toBe(true)
@@ -51,7 +55,8 @@ test.describe("custom events", () => {
 
     await page.click(".turbo-modal-dialog__close-button")
 
-    await nextEventNamed(page, "turbo:before-iframe-dismiss")
+    const before = await nextEventNamed(page, "turbo:before-iframe-dismiss")
+    expect(before.trigger).toBe("dismiss")
     const dismissed = await nextEventNamed(page, "turbo:iframe-dismissed")
     expect(dismissed.targetUrl).toBe("http://localhost:9000/")
   })
@@ -73,6 +78,10 @@ test.describe("custom events", () => {
 
     const iframe = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await iframe.locator("#modal-to-non-modal").click()
+
+    // An explicit navigation out of the modal, not an intercepted parent visit
+    const before = await nextEventNamed(page, "turbo:before-iframe-dismiss")
+    expect(before.trigger).toBe("visit")
 
     const detail = await nextEventNamed(page, "turbo:iframe-dismissed")
     expect(detail.targetUrl).toBe("http://localhost:9000/non-modal")
