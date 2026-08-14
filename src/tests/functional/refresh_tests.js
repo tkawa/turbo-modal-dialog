@@ -4,29 +4,34 @@ import { setupEventLog, nextEventNamed } from "../helpers/page.js"
 // Turbo Streams refresh broadcasts while a modal is presented.
 //
 // While a modal is open the parent's URL (document.baseURI) is the modal
-// URL, so a refresh broadcast received by the underlying page proposes a
-// visit to the modal's own URL. That proposal must refresh the iframe
-// content in place — not tear down and rebuild the dialog.
+// URL, so a refresh broadcast received by the underlying page's
+// subscription proposes a visit to the modal's own URL. Its intended
+// target is the underlying page (the modal page's own subscriptions live
+// inside the iframe and refresh it there directly), which cannot be
+// refreshed while presented — so the proposal is deferred and replayed
+// when a dismissal uncovers the underlying page.
 
 test.describe("refresh while a modal is presented", () => {
-  test("a refresh proposal in the parent reloads the iframe without rebuilding the dialog", async ({ page }) => {
+  test("a refresh proposal in the parent is deferred, leaving dialog and iframe untouched", async ({ page }) => {
     await setupEventLog(page)
     await page.goto("/")
     await page.click("#open-modal")
     await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
     await nextEventNamed(page, "turbo:iframe-content-loaded")
 
-    // Tag the dialog element; a rebuilt dialog would lose the attribute.
+    // Mark the dialog and the iframe content; a rebuild or reload would lose the marks.
+    const frame = page.frameLocator("dialog.turbo-modal-dialog__dialog iframe")
     await page.evaluate(() => {
       document.querySelector("dialog.turbo-modal-dialog__dialog").setAttribute("data-test-marker", "original")
-      window.Turbo.session.refresh(document.baseURI)
     })
+    await frame.locator("body").evaluate((body) => body.setAttribute("data-test-alive", "yes"))
 
-    await nextEventNamed(page, "turbo:iframe-refresh")
-    await nextEventNamed(page, "turbo:iframe-content-loaded")
+    await page.evaluate(() => window.Turbo.session.refresh(document.baseURI))
+    await nextEventNamed(page, "turbo:iframe-refresh-deferred")
+    await page.waitForTimeout(300)
 
     await expect(page.locator('dialog.turbo-modal-dialog__dialog[data-test-marker="original"][open]')).toBeVisible()
-    await expect(page.locator("dialog.turbo-modal-dialog__dialog")).toHaveCount(1)
+    await expect(frame.locator('body[data-test-alive="yes"]')).toBeAttached()
     // No duplicate modal-stack entry — the in-modal back button stays hidden
     await expect(page.locator(".turbo-modal-dialog__back-button")).toBeHidden()
   })
@@ -72,7 +77,7 @@ test.describe("refresh while a modal is presented", () => {
       document.querySelector("main h1").textContent = "stale"
       window.Turbo.session.refresh(document.baseURI)
     })
-    await nextEventNamed(page, "turbo:iframe-refresh")
+    await nextEventNamed(page, "turbo:iframe-refresh-deferred")
 
     await page.goBack()
 

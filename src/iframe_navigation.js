@@ -35,16 +35,17 @@
 //     detail: { url, title }
 //     Iframe content (re)loaded. Useful for syncing modal title.
 //
-//   turbo:iframe-refresh
+//   turbo:iframe-refresh-deferred
 //     detail: { url }
-//     A visit to the currently presented URL was proposed in the parent —
-//     typically a Turbo Streams refresh broadcast received by the
-//     underlying page (document.baseURI is the modal URL while presented).
-//     Host should refresh the iframe's content through the iframe's own
-//     Turbo session instead of re-presenting. The underlying page cannot
-//     be refreshed at this point (fetching baseURI would return the modal
-//     page), so the polyfill records the swallowed refresh and replays it
-//     when a browser-back dismissal later uncovers the underlying page.
+//     Informational — no response required. A visit to the currently
+//     presented URL was proposed in the parent; in practice this is a
+//     Turbo Streams refresh broadcast received by the underlying page's
+//     subscription (document.baseURI is the modal URL while presented;
+//     the modal page's own subscriptions live inside the iframe document
+//     and refresh it there directly). The underlying page cannot be
+//     refreshed at this point — fetching baseURI would return the modal
+//     page's HTML — so the polyfill records the refresh and replays it
+//     when a dismissal later uncovers the underlying page.
 //
 //   turbo:before-iframe-dismiss  (cancelable)
 //     detail: { targetUrl, trigger }
@@ -84,8 +85,9 @@
 // but JS-driven visits still can (session-timeout redirects, WebSocket
 // handlers, document-level keyboard shortcuts). Routing by proposed URL:
 //
-//   same URL as presented   → turbo:iframe-refresh (host refreshes the
-//                             iframe's content in place)
+//   same URL as presented   → deferred (recorded and replayed on
+//                             dismissal; turbo:iframe-refresh-deferred
+//                             fires as a notification)
 //   different modal URL     → navigateModal (modal-to-modal, dialog kept;
 //                             droppable via turbo:before-iframe-navigate)
 //   non-modal URL           → dismissAndVisit (dismiss, then navigate;
@@ -282,13 +284,17 @@ function handleBeforeVisit(event) {
   if (isPresented) {
     if (url === location.href) {
       // The URL already presented — typically a Turbo Streams refresh
-      // broadcast received by the underlying page, whose baseURI is the
-      // modal URL while presented. Re-presenting would tear down and
-      // rebuild the dialog; delegate to the iframe's own Turbo session
-      // instead, so refresh semantics (morph, data-turbo-permanent)
-      // apply to the modal content.
+      // broadcast received by the UNDERLYING page's subscription (the
+      // modal page's own subscriptions live inside the iframe document
+      // and refresh it there directly, so they never reach this parent
+      // session). The intended target is therefore the underlying page,
+      // which cannot be refreshed while presented: fetching baseURI
+      // would return the modal page's HTML. Forwarding to the iframe
+      // would reload modal content that wasn't addressed (destroying
+      // form state on non-morph pages). Defer instead: record the
+      // refresh and let dismissal catch the underlying page up.
       refreshedWhilePresented = true
-      dispatch("turbo:iframe-refresh", { url })
+      dispatch("turbo:iframe-refresh-deferred", { url })
     } else {
       // A different modal URL — modal-to-modal navigation initiated from
       // the parent. Navigate within the modal context (as Hotwire Native

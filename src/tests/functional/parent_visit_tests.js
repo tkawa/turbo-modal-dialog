@@ -5,7 +5,7 @@ import { setupEventLog, nextEventNamed, cancelNextEvent } from "../helpers/page.
 // (The underlying page is inert, so these can't come from link clicks —
 // think session-timeout redirects, WebSocket handlers, keyboard
 // shortcuts.) Routing by proposed URL:
-//   same URL       → refresh delegation (covered in refresh_tests.js)
+//   same URL       → deferred refresh (covered in refresh_tests.js)
 //   other modal    → navigateModal, droppable via turbo:before-iframe-navigate
 //   non-modal      → dismissAndVisit, droppable via turbo:before-iframe-dismiss
 
@@ -15,6 +15,9 @@ test.describe("parent-initiated visits while a modal is presented", () => {
     await page.goto("/")
     await page.click("#open-modal")
     await expect(page.locator("dialog.turbo-modal-dialog__dialog[open]")).toBeVisible()
+    // Wait for the iframe's initial load: __navigateInIframe (needed by
+    // modal-to-modal navigation) is injected on the iframe's load event.
+    await nextEventNamed(page, "turbo:iframe-content-loaded")
     await page.evaluate(() => {
       document.querySelector("dialog.turbo-modal-dialog__dialog").setAttribute("data-test-marker", "original")
     })
