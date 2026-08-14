@@ -18,6 +18,12 @@
 //     Host should create the iframe and pass it to detail.bindFrame
 //     so the polyfill can wire up cross-frame communication.
 //
+//   turbo:before-iframe-navigate  (cancelable)
+//     detail: { url }
+//     Fires before modal-content navigation — an intra-modal link click,
+//     or a parent-initiated visit to a different modal-pattern URL while
+//     presented. preventDefault to drop the navigation and stay put.
+//
 //   turbo:iframe-navigate
 //     detail: { url, canGoBack }
 //     The iframe should display a different modal URL. Host navigates the
@@ -41,7 +47,15 @@
 //     when a browser-back dismissal later uncovers the underlying page.
 //
 //   turbo:before-iframe-dismiss  (cancelable)
-//     Fires before iframe is dismissed. preventDefault to keep open.
+//     detail: { targetUrl, trigger }
+//     Fires before iframe is dismissed. preventDefault to keep the modal
+//     open (and, for trigger "visit", drop the navigation that wanted to
+//     leave). targetUrl is where the parent will navigate after dismissal
+//     (null for a popstate dismissal that keeps the restored page).
+//     trigger identifies the source: "dismiss" (✕ / ESC / backdrop /
+//     programmatic dismiss()), "popstate" (browser back), or "visit"
+//     (a navigation leaving the modal — a non-modal link inside the
+//     iframe, or a parent-initiated visit to a non-modal URL).
 //
 //   turbo:iframe-dismissed
 //     detail: { targetUrl }
@@ -62,6 +76,26 @@
 //                        iframe script when a user clicks an intra-modal link.
 //   back() — pop the modal stack and tell host to navigate the iframe back.
 //            No-op if stack length <= 1.
+//
+// === Visit proposals in the parent while presented ===
+//
+// While a modal is presented, the parent's URL is the modal URL and the
+// underlying page is inert, so link clicks can't propose parent visits —
+// but JS-driven visits still can (session-timeout redirects, WebSocket
+// handlers, document-level keyboard shortcuts). Routing by proposed URL:
+//
+//   same URL as presented   → turbo:iframe-refresh (host refreshes the
+//                             iframe's content in place)
+//   different modal URL     → navigateModal (modal-to-modal, dialog kept;
+//                             droppable via turbo:before-iframe-navigate)
+//   non-modal URL           → dismissAndVisit (dismiss, then navigate;
+//                             droppable via turbo:before-iframe-dismiss)
+//
+// Letting a non-modal visit through instead would body-replace the parent
+// and destroy the dialog outside the dismiss lifecycle, leaving
+// isPresented / preIframeUrl desynced. Non-Turbo navigations (location.href
+// assignment, meta refresh) are full page loads — all JS state is wiped,
+// so there is nothing to keep in sync.
 //
 // === History model: parent owns one entry per modal session ===
 //
@@ -178,9 +212,9 @@ function exitPresented() {
 
 function dismiss(fallbackUrl) {
   if (!isPresented) return
-  if (!dispatchCancelable("turbo:before-iframe-dismiss")) return
-
   const targetUrl = preIframeUrl || fallbackUrl || "/"
+  if (!dispatchCancelable("turbo:before-iframe-dismiss", { targetUrl, trigger: "dismiss" })) return
+
   exitPresented()
   dispatch("turbo:iframe-dismissed", { targetUrl })
 }
@@ -190,7 +224,7 @@ function dismissAndVisit(url) {
     window.Turbo.visit(url, { action: "replace" })
     return
   }
-  if (!dispatchCancelable("turbo:before-iframe-dismiss")) return
+  if (!dispatchCancelable("turbo:before-iframe-dismiss", { targetUrl: url, trigger: "visit" })) return
 
   exitPresented()
   dispatch("turbo:iframe-dismissed", { targetUrl: url })
@@ -202,6 +236,7 @@ function dismissAndVisit(url) {
 function navigateModal(url) {
   if (!isPresented) return
   if (!matchUrlFn(url)) return
+  if (!dispatchCancelable("turbo:before-iframe-navigate", { url })) return
   modalStack.push(url)
   if (location.href !== url) {
     history.replaceState(null, "", url)
@@ -227,19 +262,42 @@ function back() {
 function handleBeforeVisit(event) {
   const url = new URL(event.detail.url).href
   const properties = matchUrlFn(url)
-  if (!properties) return
+
+  if (!properties) {
+    // A non-modal URL proposed while presented (JS-driven — the inert
+    // underlying page can't click). Letting Turbo proceed would
+    // body-replace the parent and destroy the dialog outside the dismiss
+    // lifecycle. Route through dismissAndVisit, the same path as
+    // non-modal links inside the iframe; apps drop unwanted visits by
+    // canceling turbo:before-iframe-dismiss.
+    if (isPresented) {
+      event.preventDefault()
+      dismissAndVisit(url)
+    }
+    return
+  }
 
   event.preventDefault()
 
-  // A proposal for the URL that is already presented — typically a Turbo
-  // Streams refresh broadcast received by the underlying page, whose
-  // baseURI is the modal URL while presented. Re-presenting would tear
-  // down and rebuild the dialog; delegate to the iframe's own Turbo
-  // session instead, so refresh semantics (morph, data-turbo-permanent)
-  // apply to the modal content.
-  if (isPresented && url === location.href) {
-    refreshedWhilePresented = true
-    dispatch("turbo:iframe-refresh", { url })
+  if (isPresented) {
+    if (url === location.href) {
+      // The URL already presented — typically a Turbo Streams refresh
+      // broadcast received by the underlying page, whose baseURI is the
+      // modal URL while presented. Re-presenting would tear down and
+      // rebuild the dialog; delegate to the iframe's own Turbo session
+      // instead, so refresh semantics (morph, data-turbo-permanent)
+      // apply to the modal content.
+      refreshedWhilePresented = true
+      dispatch("turbo:iframe-refresh", { url })
+    } else {
+      // A different modal URL — modal-to-modal navigation initiated from
+      // the parent. Navigate within the modal context (as Hotwire Native
+      // does) instead of rebuilding the dialog. navigateModal keeps the
+      // one-parent-entry-per-modal-session history model via
+      // replaceState; re-presenting here used to pushState a second
+      // modal entry, creating a back-traversal dead zone.
+      navigateModal(url)
+    }
     return
   }
 
@@ -280,9 +338,9 @@ function handlePopstate() {
     // must happen before the dispatch: without View Transition support
     // the host starts that visit synchronously, and cancelling afterwards
     // would kill it.
-    if (!dispatchCancelable("turbo:before-iframe-dismiss")) return
-    cancelTurboVisit()
     const targetUrl = refreshedWhilePresented ? location.href : null
+    if (!dispatchCancelable("turbo:before-iframe-dismiss", { targetUrl, trigger: "popstate" })) return
+    cancelTurboVisit()
     exitPresented()
     dispatch("turbo:iframe-dismissed", { targetUrl })
   } else if (!isPresented && properties) {
