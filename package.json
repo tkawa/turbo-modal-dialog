@@ -1,6 +1,6 @@
 {
   "name": "turbo-modal-dialog",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Present Turbo Drive navigations as modals — bringing a Hotwire Native–compatible approach to the web.",
   "type": "module",
   "main": "dist/turbo-modal-dialog.es2017-umd.js",
