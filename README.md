@@ -341,6 +341,66 @@ The library splits responsibilities between the browser back/forward buttons and
 
 The address bar still tracks the current modal page (via `history.replaceState` from the in-modal navigation), so refresh, bookmark, and share links continue to deep-link to the displayed modal page.
 
+## Events
+
+All events are dispatched on `document` and bubble. The `turbo:before-*` events are cancelable — `event.preventDefault()` stops the transition and, when a navigation caused it, drops that navigation.
+
+| Event | Cancelable | `detail` | Fires when |
+|---|---|---|---|
+| `turbo:before-iframe-present` | ✓ | `{ url, properties }` | A modal is about to be presented |
+| `turbo:iframe-presented` | | `{ url, properties, bindFrame }` | A modal was presented (`bindFrame` is internal host wiring) |
+| `turbo:before-iframe-navigate` | ✓ | `{ url, trigger }` | The modal is about to navigate to another modal URL |
+| `turbo:iframe-navigate` | | `{ url, canGoBack }` | The modal navigated; `canGoBack` drives the in-modal back button |
+| `turbo:iframe-content-loaded` | | `{ url, title }` | The iframe (re)loaded its content |
+| `turbo:iframe-refresh-deferred` | | `{ url }` | A refresh for the hidden underlying page was deferred (see below); informational |
+| `turbo:before-iframe-dismiss` | ✓ | `{ targetUrl, trigger }` | The modal is about to be dismissed; `targetUrl` is where the parent will navigate (`null` for browser back) |
+| `turbo:iframe-dismissed` | | `{ targetUrl }` | The modal was dismissed |
+
+The `trigger` value identifies what caused the transition, split along one axis: an **explicit request** (the user or your code asked for it) versus an **intercepted parent visit** (a JS-driven `Turbo.visit` in the parent that the library rerouted — see the next section).
+
+| Event | `trigger` | Source |
+|---|---|---|
+| `before-iframe-navigate` | `"navigate"` | Explicit: an intra-modal link click or a `navigateModal()` call |
+| | `"parent-visit"` | Intercepted: a parent visit to another modal URL |
+| `before-iframe-dismiss` | `"dismiss"` | ✕ button, ESC, backdrop click, or a programmatic `dismiss()` |
+| | `"popstate"` | Browser back |
+| | `"visit"` | Explicit: a non-modal link inside the modal, or a `dismissAndVisit()` call |
+| | `"parent-visit"` | Intercepted: a parent visit to a non-modal URL |
+
+## While a modal is open: background updates and parent visits
+
+The underlying page stays alive under the dialog — hidden and inert, but fully present in the DOM. Two kinds of background activity can reach it while the modal is open.
+
+**Turbo Streams.** Targeted stream actions (`append`, `replace`, `remove`, …) mutate the DOM directly and keep updating the hidden page throughout. The `refresh` action is different: it is bound to `document.baseURI`, which is the modal URL while presented, so it cannot fetch the underlying page's HTML at that moment. The library defers it — the broadcast is recorded, announced via `turbo:iframe-refresh-deferred`, and replayed when dismissal uncovers the page (an explicit close fetches fresh HTML anyway; browser back triggers the replay). The modal's own stream subscriptions are unaffected: they live inside the iframe and refresh it there directly, with morph and `data-turbo-permanent` honored.
+
+**JS-driven visits.** The inert underlying page can't produce link clicks, but code still can — session-timeout redirects, WebSocket handlers, document-level keyboard shortcuts. A `Turbo.visit` proposed in the parent while a modal is open is routed by its URL:
+
+| Proposed URL | Behavior | Decision point |
+|---|---|---|
+| The URL already presented | Deferred as a refresh (see above) | — |
+| Another modal-pattern URL | Navigates within the modal (dialog kept) | `turbo:before-iframe-navigate`, trigger `"parent-visit"` |
+| A non-modal URL | Dismisses the modal, then navigates | `turbo:before-iframe-dismiss`, trigger `"parent-visit"` |
+
+By default these visits proceed, because the most important ones are forced (a session-timeout redirect to a sign-in page must win). Whether a given visit *should* win is application policy, so the decision points are cancelable and carry enough detail to decide:
+
+```js
+// Protect the user's in-modal work from ambient background visits,
+// while letting a session-timeout redirect through.
+document.addEventListener("turbo:before-iframe-dismiss", (event) => {
+  const { trigger, targetUrl } = event.detail
+  if (trigger === "parent-visit" && !targetUrl.includes("/sign_in")) {
+    event.preventDefault()
+  }
+})
+
+// Don't let background code steal the current modal either.
+document.addEventListener("turbo:before-iframe-navigate", (event) => {
+  if (event.detail.trigger === "parent-visit") event.preventDefault()
+})
+```
+
+Because the explicit sources keep their own trigger values (`"dismiss"`, `"popstate"`, `"visit"`, `"navigate"`), a policy like the above never traps the user: their ✕ button, browser back, and in-modal links are unaffected.
+
 ## Why this library
 
 For the longer pitch — the problem framing, why the modal-as-URL reframe matters, comparison with adjacent solutions, and honest discussion of what the library does not solve — see [docs/why-this-library.md](docs/why-this-library.md).
